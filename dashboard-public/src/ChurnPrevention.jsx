@@ -29,6 +29,17 @@ const teamOptions = [
   "Retention Management",
 ];
 const storageKey = "sedad-demo-churn-records-v1";
+const activityResetKey = `${storageKey}-activity-reset-v1`;
+
+function clearActivityHistory(records) {
+  return Object.fromEntries(Object.entries(records).map(([id, record]) => {
+    const cleaned = { ...record, actionUpdatedAt: null };
+    delete cleaned.lastContactLoggedAt;
+    delete cleaned.contactHistory;
+    delete cleaned.statusHistory;
+    return [id, cleaned];
+  }));
+}
 
 function formatComparison(item, period) {
   if (!item) return "Comparison unavailable";
@@ -42,7 +53,17 @@ function formatComparison(item, period) {
 
 function buildActivityReport(records, period) {
   const now = Date.now();
-  const duration = period === "daily" ? 24 * 60 * 60 * 1000 : 7 * 24 * 60 * 60 * 1000;
+  const date = new Date(now);
+  let currentStart;
+  let previousStart;
+  if (period === "monthly") {
+    currentStart = new Date(date.getFullYear(), date.getMonth(), 1).getTime();
+    previousStart = new Date(date.getFullYear(), date.getMonth() - 1, 1).getTime();
+  } else {
+    const duration = period === "daily" ? 24 * 60 * 60 * 1000 : 7 * 24 * 60 * 60 * 1000;
+    currentStart = now - duration;
+    previousStart = now - 2 * duration;
+  }
 
   const events = [];
 
@@ -103,8 +124,8 @@ function buildActivityReport(records, period) {
     return { totals, team_performance: Object.values(teams) };
   }
 
-  const current = summarize(now - duration, now);
-  const previous = summarize(now - 2 * duration, now - duration);
+  const current = summarize(currentStart, now);
+  const previous = summarize(previousStart, currentStart);
   const comparison = {};
 
   for (const key of Object.keys(current.totals)) {
@@ -136,9 +157,8 @@ function ChurnPrevention({ churnData, loading, error }) {
   const [engagementFilter, setEngagementFilter] = useState("all");
   const [priorityFilter, setPriorityFilter] = useState("all");
   const [retentionPeriod, setRetentionPeriod] = useState("daily");
-  const [retentionReport, setRetentionReport] = useState(null);
-  const [reportError, setReportError] = useState("");
   const [actionsLoading, setActionsLoading] = useState(true);
+  const [actionsError, setActionsError] = useState("");
 
   useEffect(() => {
     let cancelled = false;
@@ -158,7 +178,7 @@ function ChurnPrevention({ churnData, loading, error }) {
             notes: action.notes || "",
             assignedTeam: action.assigned_team || "",
             assignedEmployee: action.assigned_employee || "",
-            actionUpdatedAt: action.updated_at || null,
+            actionUpdatedAt: null,
           };
         }
         let savedRecords = {};
@@ -171,9 +191,19 @@ function ChurnPrevention({ churnData, loading, error }) {
         for (const [id, saved] of Object.entries(savedRecords)) {
           mergedRecords[id] = { ...(loadedRecords[id] || {}), ...(saved || {}) };
         }
-        if (!cancelled) setRecords(mergedRecords);
+        let recordsToLoad = mergedRecords;
+        try {
+          if (localStorage.getItem(activityResetKey) !== "done") {
+            recordsToLoad = clearActivityHistory(mergedRecords);
+            localStorage.setItem(storageKey, JSON.stringify(recordsToLoad));
+            localStorage.setItem(activityResetKey, "done");
+          }
+        } catch {
+          recordsToLoad = clearActivityHistory(mergedRecords);
+        }
+        if (!cancelled) setRecords(recordsToLoad);
       } catch (err) {
-        if (!cancelled) setReportError(err.message);
+        if (!cancelled) setActionsError(err.message);
       } finally {
         if (!cancelled) setActionsLoading(false);
       }
@@ -182,27 +212,6 @@ function ChurnPrevention({ churnData, loading, error }) {
     loadActions();
     return () => { cancelled = true; };
   }, []);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    async function loadReport() {
-      setReportError("");
-      setRetentionReport(null);
-      if (retentionPeriod !== "monthly") return;
-      try {
-        const response = await fetch(`/data/retention-${retentionPeriod}.json`);
-        if (!response.ok) throw new Error("Retention report could not be loaded.");
-        const data = await response.json();
-        if (!cancelled) setRetentionReport(data);
-      } catch (err) {
-        if (!cancelled) setReportError(err.message);
-      }
-    }
-
-    loadReport();
-    return () => { cancelled = true; };
-  }, [retentionPeriod]);
 
   const customers = churnData?.customers || [];
 
@@ -242,6 +251,7 @@ function ChurnPrevention({ churnData, loading, error }) {
         [selectedId]: {
           ...previous,
           [field]: value,
+          actionUpdatedAt: new Date().toISOString(),
           statusHistory,
         },
       };
@@ -299,10 +309,9 @@ function ChurnPrevention({ churnData, loading, error }) {
   }
 
   if (error) return <div className="cp-message cp-error">{error}</div>;
+  if (actionsError) return <div className="cp-message cp-error">{actionsError}</div>;
 
-  const report = retentionPeriod === "monthly"
-    ? retentionReport
-    : buildActivityReport(records, retentionPeriod);
+  const report = buildActivityReport(records, retentionPeriod);
   const visibleCustomers = filteredCustomers.slice(0, 200);
 
   return (
@@ -312,7 +321,7 @@ function ChurnPrevention({ churnData, loading, error }) {
         <span>
           Synthetic demonstration data. You can edit retention actions, priorities and recommendations.
           Your changes are saved only in this browser and are not shared with other users or devices.
-          Retention effectiveness reports remain exported snapshots.
+          Daily, weekly and monthly activity is counted from new changes and contacts logged in this browser.
         </span>
       </div>
 
@@ -331,7 +340,7 @@ function ChurnPrevention({ churnData, loading, error }) {
         <div className="cp-heading">
           <div>
             <h2>Retention Effectiveness</h2>
-            <p>Snapshot of recorded retention activity</p>
+            <p>Activity recorded in this browser</p>
           </div>
           <label className="cp-period-select">
             Reporting Period
@@ -344,13 +353,10 @@ function ChurnPrevention({ churnData, loading, error }) {
         </div>
 
         <h3 className="cp-report-subtitle">{retentionPeriod.charAt(0).toUpperCase() + retentionPeriod.slice(1)} Activity</h3>
-        {reportError && <p className="cp-report-error">{reportError}</p>}
 
         <div className="cp-effectiveness-grid">
           {[
-            [retentionPeriod === "monthly" ? "Actions Created" : "Actions Updated",
-              retentionPeriod === "monthly" ? "actions_created" : "actions_updated",
-              retentionPeriod === "monthly" ? "New actions recorded this period" : "Actions with an update timestamp in this period"],
+            ["Actions Updated", "actions_updated", "Retention actions edited during this period"],
             ["Customer Contacts", "customer_contacts", "Explicitly logged customer contacts"],
             ["Successful Status Changes", "successful_outcomes", "Status changes marked successfully retained"],
             ["Unsuccessful Status Changes", "unsuccessful_outcomes", "Status changes marked not successfully retained"],
@@ -382,7 +388,7 @@ function ChurnPrevention({ churnData, loading, error }) {
         ) : (
           <p className="cp-effectiveness-note">No team activity recorded for this period.</p>
         )}
-        <p className="cp-effectiveness-note">Figures are from the exported demo snapshot and are not updated live.</p>
+        <p className="cp-effectiveness-note">Reports update from activity newly recorded in this browser. Historical activity was reset.</p>
       </section>
 
       <section className="cp-panel">
