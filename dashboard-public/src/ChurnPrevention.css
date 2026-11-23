@@ -443,3 +443,81 @@
 .cp-edit-button:hover {
   background: #1d4ed8;
 }
+
+/* Explanation of engagement scoring and retention priority */
+.cp-priority-guide {
+  margin: 0 0 17px;
+  border: 1px solid var(--border-color, #e1e8f0);
+  border-radius: 9px;
+  background: var(--panel-background, #fff);
+  color: var(--text-primary, #26364d);
+}
+
+.cp-priority-guide summary {
+  padding: 13px 15px;
+  cursor: pointer;
+  color: #315b91;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.cp-guide-content {
+  padding: 0 15px 15px;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--text-primary, #26364d);
+}
+
+.cp-guide-content h3 {
+  margin: 17px 0 8px;
+  font-size: 13px;
+}
+
+.cp-guide-content p { margin: 8px 0; }
+
+.cp-guide-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.cp-guide-grid > div {
+  padding: 12px;
+  border: 1px solid var(--border-color, #e8edf3);
+  border-radius: 8px;
+}
+
+.cp-guide-grid ul,
+.cp-guide-content > ul {
+  margin: 7px 0;
+  padding-left: 18px;
+}
+
+.cp-guide-note {
+  color: #778499;
+  font-size: 11px;
+}
+
+.cp-guide-table-wrap { overflow-x: auto; }
+
+.cp-guide-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 11px;
+  text-align: left;
+}
+
+.cp-guide-table th,
+.cp-guide-table td {
+  padding: 9px 10px;
+  border: 1px solid var(--border-color, #e8edf3);
+}
+
+.cp-guide-table thead th {
+  background: var(--panel-background, #f4f7fb);
+  color: #778499;
+}
+
+@media (max-width: 700px) {
+  .cp-guide-grid { grid-template-columns: 1fr; }
+}

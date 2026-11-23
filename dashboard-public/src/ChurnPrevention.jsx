@@ -399,6 +399,90 @@ function ChurnPrevention({ churnData, loading, error }) {
           </div>
         </div>
 
+        <details className="cp-priority-guide">
+          <summary>How customer priorities are calculated</summary>
+          <div className="cp-guide-content">
+            <p>
+              <strong>Retention Priority</strong> combines the customer's Churn Risk
+              with their Engagement Segment. It helps the team identify which
+              customers should receive attention first.
+            </p>
+
+            <h3>1. Engagement Score (0–100 points)</h3>
+            <div className="cp-guide-grid">
+              <div>
+                <strong>Recency · max. 40</strong>
+                <ul>
+                  <li>Last successful transaction within 30 days: 40 points</li>
+                  <li>31–60 days: 30 points</li>
+                  <li>61–90 days: 15 points</li>
+                  <li>More than 90 days or no transaction: 0 points</li>
+                </ul>
+              </div>
+              <div>
+                <strong>Frequency · max. 40</strong>
+                <ul>
+                  <li>10 or more completed transactions in 90 days: 40 points</li>
+                  <li>5–9 transactions: 30 points</li>
+                  <li>1–4 transactions: 20 points</li>
+                  <li>No transactions: 0 points</li>
+                </ul>
+              </div>
+              <div>
+                <strong>Active Accounts · max. 20</strong>
+                <ul>
+                  <li>2 or more active accounts: 20 points</li>
+                  <li>1 active account: 15 points</li>
+                  <li>No active accounts: 0 points</li>
+                </ul>
+              </div>
+            </div>
+
+            <p className="cp-guide-note">
+              The three component scores are added together. Engagement Segment:
+              <strong> High</strong> = 70–100, <strong>Medium</strong> = 40–69,
+              <strong> Low</strong> = 0–39.
+            </p>
+
+            <h3>2. Retention Priority Matrix</h3>
+            <p className="cp-guide-note">
+              The backend combines Churn Risk (rows) and Engagement Segment (columns):
+            </p>
+            <div className="cp-guide-table-wrap">
+              <table className="cp-guide-table">
+                <thead>
+                  <tr>
+                    <th>Churn Risk</th>
+                    <th>High Engagement</th>
+                    <th>Medium Engagement</th>
+                    <th>Low Engagement</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr><th>High Risk</th><td>Critical</td><td>High</td><td>Medium</td></tr>
+                  <tr><th>Medium Risk</th><td>High</td><td>Medium</td><td>Medium</td></tr>
+                  <tr><th>Low Risk</th><td>Low</td><td>Low</td><td>Low</td></tr>
+                </tbody>
+              </table>
+            </div>
+
+            <h3>3. How to interpret the result</h3>
+            <ul>
+              <li><strong>Critical:</strong> Highest retention attention. High churn risk combined with high engagement.</li>
+              <li><strong>High:</strong> Important retention case requiring focused follow-up.</li>
+              <li><strong>Medium:</strong> Monitor the customer and consider appropriate retention activity.</li>
+              <li><strong>Low:</strong> Lower immediate retention priority under the current rules.</li>
+            </ul>
+
+            <p className="cp-guide-note">
+              This is a rule-based scoring and prioritization method. The Engagement
+              Score is calculated from the listed activity indicators; Retention
+              Priority is assigned using the matrix above. It is not itself a
+              machine-learning prediction.
+            </p>
+          </div>
+        </details>
+
         <div className="cp-filters">
           <input type="search" placeholder="Search customer ID …" value={search} onChange={(event) => setSearch(event.target.value)} />
           <select value={riskFilter} onChange={(event) => setRiskFilter(event.target.value)}>
