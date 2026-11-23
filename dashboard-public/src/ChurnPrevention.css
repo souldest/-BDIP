@@ -414,3 +414,32 @@
 .cp-table th:last-child {
   z-index: 3;
 }
+
+
+/* Clearly highlight the selected customer row */
+.cp-table tbody tr.cp-selected-row td {
+  background: #e8f0fe !important;
+  border-top: 1px solid #8ab4f8;
+  border-bottom: 1px solid #8ab4f8;
+}
+
+.cp-table tbody tr.cp-selected-row td:first-child {
+  box-shadow: inset 4px 0 0 #2563eb;
+}
+
+/* Explicit row-level edit action */
+.cp-edit-button {
+  padding: 6px 12px;
+  border: 1px solid #2563eb;
+  border-radius: 6px;
+  background: #2563eb;
+  color: #ffffff;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.cp-edit-button:hover {
+  background: #1d4ed8;
+}

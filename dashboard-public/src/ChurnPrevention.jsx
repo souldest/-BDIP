@@ -40,6 +40,92 @@ function formatComparison(item, period) {
   return `${sign}${change}${percentage} vs ${previous}`;
 }
 
+function buildActivityReport(records, period) {
+  const now = Date.now();
+  const duration = period === "daily" ? 24 * 60 * 60 * 1000 : 7 * 24 * 60 * 60 * 1000;
+
+  const events = [];
+
+  for (const record of Object.values(records)) {
+    const team = record.assignedTeam || "Unassigned";
+    const actionTime = Date.parse(record.actionUpdatedAt || "");
+
+    if (Number.isFinite(actionTime)) {
+      events.push({ type: "action_updated", time: actionTime, team });
+    }
+
+    const contacts = record.contactHistory?.length
+      ? record.contactHistory
+      : (record.lastContactLoggedAt ? [record.lastContactLoggedAt] : []);
+
+    for (const timestamp of contacts) {
+      const time = Date.parse(timestamp);
+      if (Number.isFinite(time)) events.push({ type: "contact", time, team });
+    }
+
+    for (const item of record.statusHistory || []) {
+      const time = Date.parse(item.at || "");
+      if (!Number.isFinite(time)) continue;
+
+      if (item.status === "Erfolgreich zurückgewonnen") {
+        events.push({ type: "successful", time, team });
+      } else if (item.status === "Nicht zurückgewonnen") {
+        events.push({ type: "unsuccessful", time, team });
+      } else {
+        events.push({ type: "status_change", time, team });
+      }
+    }
+  }
+
+  function summarize(start, end) {
+    const selected = events.filter((event) => event.time >= start && event.time < end);
+    const totals = {
+      total_events: selected.length,
+      actions_updated: selected.filter((event) => event.type === "action_updated").length,
+      customer_contacts: selected.filter((event) => event.type === "contact").length,
+      successful_outcomes: selected.filter((event) => event.type === "successful").length,
+      unsuccessful_outcomes: selected.filter((event) => event.type === "unsuccessful").length,
+    };
+
+    const teams = {};
+    for (const event of selected) {
+      const team = teams[event.team] ||= {
+        team_name: event.team,
+        recorded_events: 0,
+        customer_contacts: 0,
+        successful_outcomes: 0,
+      };
+      team.recorded_events += 1;
+      if (event.type === "contact") team.customer_contacts += 1;
+      if (event.type === "successful") team.successful_outcomes += 1;
+    }
+
+    return { totals, team_performance: Object.values(teams) };
+  }
+
+  const current = summarize(now - duration, now);
+  const previous = summarize(now - 2 * duration, now - duration);
+  const comparison = {};
+
+  for (const key of Object.keys(current.totals)) {
+    const value = current.totals[key];
+    const oldValue = previous.totals[key];
+    comparison[key] = {
+      current: value,
+      previous: oldValue,
+      change: value - oldValue,
+      change_percent: oldValue ? Math.round(((value - oldValue) / oldValue) * 100) : null,
+    };
+  }
+
+  return {
+    totals: current.totals,
+    previous_period: previous.totals,
+    comparison,
+    team_performance: current.team_performance,
+  };
+}
+
 function ChurnPrevention({ churnData, loading, error }) {
   const [records, setRecords] = useState({});
   const [selectedId, setSelectedId] = useState("");
@@ -72,6 +158,7 @@ function ChurnPrevention({ churnData, loading, error }) {
             notes: action.notes || "",
             assignedTeam: action.assigned_team || "",
             assignedEmployee: action.assigned_employee || "",
+            actionUpdatedAt: action.updated_at || null,
           };
         }
         let savedRecords = {};
@@ -80,7 +167,11 @@ function ChurnPrevention({ churnData, loading, error }) {
         } catch {
           savedRecords = {};
         }
-        if (!cancelled) setRecords({ ...loadedRecords, ...savedRecords });
+        const mergedRecords = { ...loadedRecords };
+        for (const [id, saved] of Object.entries(savedRecords)) {
+          mergedRecords[id] = { ...(loadedRecords[id] || {}), ...(saved || {}) };
+        }
+        if (!cancelled) setRecords(mergedRecords);
       } catch (err) {
         if (!cancelled) setReportError(err.message);
       } finally {
@@ -98,6 +189,7 @@ function ChurnPrevention({ churnData, loading, error }) {
     async function loadReport() {
       setReportError("");
       setRetentionReport(null);
+      if (retentionPeriod !== "monthly") return;
       try {
         const response = await fetch(`/data/retention-${retentionPeriod}.json`);
         if (!response.ok) throw new Error("Retention report could not be loaded.");
@@ -140,9 +232,18 @@ function ChurnPrevention({ churnData, loading, error }) {
     if (!selectedId) return;
     setSaveMessage("");
     setRecords((current) => {
+      const previous = current[selectedId] || {};
+      const statusHistory = field === "status" && previous.status !== value
+        ? [...(previous.statusHistory || []), { status: value, at: new Date().toISOString() }]
+        : (previous.statusHistory || []);
+
       const next = {
         ...current,
-        [selectedId]: { ...(current[selectedId] || {}), [field]: value },
+        [selectedId]: {
+          ...previous,
+          [field]: value,
+          statusHistory,
+        },
       };
       try {
         localStorage.setItem(storageKey, JSON.stringify(next));
@@ -163,6 +264,10 @@ function ChurnPrevention({ churnData, loading, error }) {
           ...(current[selectedId] || {}),
           status: "Kontakt aufgenommen",
           lastContactLoggedAt: new Date().toISOString(),
+          contactHistory: [
+            ...((current[selectedId] || {}).contactHistory || []),
+            new Date().toISOString(),
+          ],
         },
       };
       try {
@@ -195,7 +300,9 @@ function ChurnPrevention({ churnData, loading, error }) {
 
   if (error) return <div className="cp-message cp-error">{error}</div>;
 
-  const report = retentionReport;
+  const report = retentionPeriod === "monthly"
+    ? retentionReport
+    : buildActivityReport(records, retentionPeriod);
   const visibleCustomers = filteredCustomers.slice(0, 200);
 
   return (
@@ -241,10 +348,12 @@ function ChurnPrevention({ churnData, loading, error }) {
 
         <div className="cp-effectiveness-grid">
           {[
-            ["Actions Created", "actions_created", "New actions recorded this period"],
+            [retentionPeriod === "monthly" ? "Actions Created" : "Actions Updated",
+              retentionPeriod === "monthly" ? "actions_created" : "actions_updated",
+              retentionPeriod === "monthly" ? "New actions recorded this period" : "Actions with an update timestamp in this period"],
             ["Customer Contacts", "customer_contacts", "Explicitly logged customer contacts"],
-            ["Successful Outcomes", "successful_outcomes", "Customers marked successfully retained"],
-            ["Unsuccessful Outcomes", "unsuccessful_outcomes", "Customers not successfully retained"],
+            ["Successful Status Changes", "successful_outcomes", "Status changes marked successfully retained"],
+            ["Unsuccessful Status Changes", "unsuccessful_outcomes", "Status changes marked not successfully retained"],
           ].map(([label, key, description]) => (
             <article className="cp-effectiveness-card" key={key}>
               <span>{label}</span>
@@ -305,7 +414,7 @@ function ChurnPrevention({ churnData, loading, error }) {
           <table className="cp-table">
             <thead>
               <tr>
-                <th>Customer ID</th><th>Risk</th><th>Engagement</th><th>Segment</th><th>Retention Priority</th><th>Inactive For</th><th>Recommendation</th><th>Action Status</th>
+                <th>Customer ID</th><th>Risk</th><th>Engagement</th><th>Segment</th><th>Retention Priority</th><th>Inactive For</th><th>Recommendation</th><th>Action Status</th><th>Action</th>
               </tr>
             </thead>
             <tbody>
@@ -327,10 +436,23 @@ function ChurnPrevention({ churnData, loading, error }) {
                     <td>{customer.days_inactive == null ? "No Successful Transaction" : `${customer.days_inactive} days`}</td>
                     <td className="cp-recommendation">{record.recommendation || customer.recommendation || customer.risk_reason || "–"}</td>
                     <td><span className="cp-status">{statusLabels[record.status || "Offen"] || record.status || "Open"}</span></td>
+                    <td>
+                      <button
+                        type="button"
+                        className="cp-edit-button"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          setSelectedId(customer.customer_id);
+                          setSaveMessage("");
+                        }}
+                      >
+                        Edit
+                      </button>
+                    </td>
                   </tr>
                 );
               })}
-              {visibleCustomers.length === 0 && <tr><td colSpan="8" className="cp-empty">No matching customers found.</td></tr>}
+              {visibleCustomers.length === 0 && <tr><td colSpan="9" className="cp-empty">No matching customers found.</td></tr>}
             </tbody>
           </table>
         </div>
