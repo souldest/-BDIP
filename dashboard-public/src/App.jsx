@@ -5,7 +5,6 @@ import CustomerIntelligence from "./CustomerIntelligence";
 import ChurnPrevention from "./ChurnPrevention";
 import { translations } from "./translations";
 
-const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || "http://localhost:8005").replace(/\/$/, "");
 
 function App() {
   const [selectedView, setSelectedView] = useState("customer-intelligence");
@@ -24,16 +23,14 @@ function App() {
     async function loadDashboardData() {
       try {
         const endpoints = [
-          "/api/sedad/customer-intelligence",
-          "/api/sedad/customer-activity",
-          "/api/sedad/customer-segmentation",
-          "/api/sedad/churn-analysis",
+          "/data/customer-intelligence.json",
+          "/data/customer-activity.json",
+          "/data/customer-segmentation.json",
+          "/data/churn-analysis.json",
         ];
 
         const responses = await Promise.all(
-          endpoints.map((endpoint) =>
-            fetch(`${API_BASE_URL}${endpoint}`)
-          )
+          endpoints.map((endpoint) => fetch(endpoint))
         );
 
         const failedResponse = responses.find((response) => !response.ok);
