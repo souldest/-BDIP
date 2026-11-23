@@ -8,7 +8,7 @@ import { translations } from "./translations";
 
 function App() {
   const [selectedView, setSelectedView] = useState("customer-intelligence");
-  const [language, setLanguage] = useState("en");
+  const [language, setLanguage] = useState("fr");
   const t = translations[language];
   const [customerData, setCustomerData] = useState(null);
   const [activityData, setActivityData] = useState(null);

@@ -29,18 +29,7 @@ const teamOptions = [
   "Customer Operations",
   "Retention Management",
 ];
-const storageKey = "sedad-demo-churn-records-v1";
-const activityResetKey = `${storageKey}-activity-reset-v1`;
-
-function clearActivityHistory(records) {
-  return Object.fromEntries(Object.entries(records).map(([id, record]) => {
-    const cleaned = { ...record, actionUpdatedAt: null };
-    delete cleaned.lastContactLoggedAt;
-    delete cleaned.contactHistory;
-    delete cleaned.statusHistory;
-    return [id, cleaned];
-  }));
-}
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "";
 
 function formatComparison(item, period, t) {
   if (!item) return t.comparisonUnavailable;
@@ -87,102 +76,6 @@ function translateRecommendation(value, language) {
   return value;
 }
 
-function buildActivityReport(records, period) {
-  const now = Date.now();
-  const date = new Date(now);
-  let currentStart;
-  let previousStart;
-  if (period === "monthly") {
-    currentStart = new Date(date.getFullYear(), date.getMonth(), 1).getTime();
-    previousStart = new Date(date.getFullYear(), date.getMonth() - 1, 1).getTime();
-  } else {
-    const duration = period === "daily" ? 24 * 60 * 60 * 1000 : 7 * 24 * 60 * 60 * 1000;
-    currentStart = now - duration;
-    previousStart = now - 2 * duration;
-  }
-
-  const events = [];
-
-  for (const record of Object.values(records)) {
-    const team = record.assignedTeam || "Unassigned";
-    const actionTime = Date.parse(record.actionUpdatedAt || "");
-
-    if (Number.isFinite(actionTime)) {
-      events.push({ type: "action_updated", time: actionTime, team });
-    }
-
-    const contacts = record.contactHistory?.length
-      ? record.contactHistory
-      : (record.lastContactLoggedAt ? [record.lastContactLoggedAt] : []);
-
-    for (const timestamp of contacts) {
-      const time = Date.parse(timestamp);
-      if (Number.isFinite(time)) events.push({ type: "contact", time, team });
-    }
-
-    for (const item of record.statusHistory || []) {
-      const time = Date.parse(item.at || "");
-      if (!Number.isFinite(time)) continue;
-
-      if (item.status === "Erfolgreich zurückgewonnen") {
-        events.push({ type: "successful", time, team });
-      } else if (item.status === "Nicht zurückgewonnen") {
-        events.push({ type: "unsuccessful", time, team });
-      } else {
-        events.push({ type: "status_change", time, team });
-      }
-    }
-  }
-
-  function summarize(start, end) {
-    const selected = events.filter((event) => event.time >= start && event.time < end);
-    const totals = {
-      total_events: selected.length,
-      actions_updated: selected.filter((event) => event.type === "action_updated").length,
-      customer_contacts: selected.filter((event) => event.type === "contact").length,
-      successful_outcomes: selected.filter((event) => event.type === "successful").length,
-      unsuccessful_outcomes: selected.filter((event) => event.type === "unsuccessful").length,
-    };
-
-    const teams = {};
-    for (const event of selected) {
-      const team = teams[event.team] ||= {
-        team_name: event.team,
-        recorded_events: 0,
-        customer_contacts: 0,
-        successful_outcomes: 0,
-      };
-      team.recorded_events += 1;
-      if (event.type === "contact") team.customer_contacts += 1;
-      if (event.type === "successful") team.successful_outcomes += 1;
-    }
-
-    return { totals, team_performance: Object.values(teams) };
-  }
-
-  const current = summarize(currentStart, now);
-  const previous = summarize(previousStart, currentStart);
-  const comparison = {};
-
-  for (const key of Object.keys(current.totals)) {
-    const value = current.totals[key];
-    const oldValue = previous.totals[key];
-    comparison[key] = {
-      current: value,
-      previous: oldValue,
-      change: value - oldValue,
-      change_percent: oldValue ? Math.round(((value - oldValue) / oldValue) * 100) : null,
-    };
-  }
-
-  return {
-    totals: current.totals,
-    previous_period: previous.totals,
-    comparison,
-    team_performance: current.team_performance,
-  };
-}
-
 function ChurnPrevention({ churnData, loading, error, language = "en" }) {
   const t = translations[language] || translations.en;
   const [records, setRecords] = useState({});
@@ -196,49 +89,36 @@ function ChurnPrevention({ churnData, loading, error, language = "en" }) {
   const [retentionPeriod, setRetentionPeriod] = useState("daily");
   const [actionsLoading, setActionsLoading] = useState(true);
   const [actionsError, setActionsError] = useState("");
+  const [isSaving, setIsSaving] = useState(false);
+  const [isLoggingContact, setIsLoggingContact] = useState(false);
+  const [activityReport, setActivityReport] = useState(null);
 
   useEffect(() => {
     let cancelled = false;
 
     async function loadActions() {
       try {
-        const response = await fetch("/data/churn-prevention.json");
-        if (!response.ok) throw new Error("Retention actions could not be loaded.");
-        const data = await response.json();
+        const response = await fetch(`${API_BASE_URL}/api/sedad/churn-prevention`);
 
+        if (!response.ok) {
+          throw new Error("Churn Prevention data could not be loaded from the database.");
+        }
+
+        const apiData = await response.json();
         const loadedRecords = {};
-        for (const action of data.actions || []) {
+
+        for (const action of apiData.actions || []) {
           loadedRecords[action.customer_id] = {
-            action: action.action,
+            action: action.action || "",
             status: action.status || "Offen",
             followUpDate: action.follow_up_date || "",
             notes: action.notes || "",
             assignedTeam: action.assigned_team || "",
             assignedEmployee: action.assigned_employee || "",
-            actionUpdatedAt: null,
           };
         }
-        let savedRecords = {};
-        try {
-          savedRecords = JSON.parse(localStorage.getItem(storageKey) || "{}");
-        } catch {
-          savedRecords = {};
-        }
-        const mergedRecords = { ...loadedRecords };
-        for (const [id, saved] of Object.entries(savedRecords)) {
-          mergedRecords[id] = { ...(loadedRecords[id] || {}), ...(saved || {}) };
-        }
-        let recordsToLoad = mergedRecords;
-        try {
-          if (localStorage.getItem(activityResetKey) !== "done") {
-            recordsToLoad = clearActivityHistory(mergedRecords);
-            localStorage.setItem(storageKey, JSON.stringify(recordsToLoad));
-            localStorage.setItem(activityResetKey, "done");
-          }
-        } catch {
-          recordsToLoad = clearActivityHistory(mergedRecords);
-        }
-        if (!cancelled) setRecords(recordsToLoad);
+
+        if (!cancelled) setRecords(loadedRecords);
       } catch (err) {
         if (!cancelled) setActionsError(err.message);
       } finally {
@@ -249,6 +129,26 @@ function ChurnPrevention({ churnData, loading, error, language = "en" }) {
     loadActions();
     return () => { cancelled = true; };
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadPerformance() {
+      try {
+        const response = await fetch(
+          `${API_BASE_URL}/api/sedad/retention-performance?period=${retentionPeriod}`
+        );
+        if (!response.ok) throw new Error("Retention performance could not be loaded.");
+        const data = await response.json();
+        if (!cancelled) setActivityReport(data);
+      } catch (err) {
+        if (!cancelled) setActionsError(err.message);
+      }
+    }
+
+    loadPerformance();
+    return () => { cancelled = true; };
+  }, [retentionPeriod]);
 
   const customers = churnData?.customers || [];
 
@@ -277,55 +177,120 @@ function ChurnPrevention({ churnData, loading, error, language = "en" }) {
   function updateSelectedRecord(field, value) {
     if (!selectedId) return;
     setSaveMessage("");
-    setRecords((current) => {
-      const previous = current[selectedId] || {};
-      const statusHistory = field === "status" && previous.status !== value
-        ? [...(previous.statusHistory || []), { status: value, at: new Date().toISOString() }]
-        : (previous.statusHistory || []);
-
-      const next = {
-        ...current,
-        [selectedId]: {
-          ...previous,
-          [field]: value,
-          actionUpdatedAt: new Date().toISOString(),
-          statusHistory,
-        },
-      };
-      try {
-        localStorage.setItem(storageKey, JSON.stringify(next));
-      } catch {
-        setSaveMessage(t.storageUnavailable);
-      }
-      return next;
-    });
-    setSaveMessage(t.savedInBrowser);
+    setRecords((current) => ({
+      ...current,
+      [selectedId]: {
+        ...(current[selectedId] || {}),
+        [field]: value,
+      },
+    }));
   }
 
-  function logCustomerContact() {
-    if (!selectedId) return;
-    setRecords((current) => {
-      const next = {
-        ...current,
-        [selectedId]: {
-          ...(current[selectedId] || {}),
-          status: "Kontakt aufgenommen",
-          lastContactLoggedAt: new Date().toISOString(),
-          contactHistory: [
-            ...((current[selectedId] || {}).contactHistory || []),
-            new Date().toISOString(),
-          ],
-        },
-      };
-      try {
-        localStorage.setItem(storageKey, JSON.stringify(next));
-      } catch {
-        setSaveMessage(t.storageUnavailable);
-        return next;
+  function getSavePayload(record) {
+    return {
+      action: record.action || "",
+      status: record.status || "Offen",
+      follow_up_date: record.followUpDate || null,
+      notes: record.notes || null,
+      assigned_team: record.assignedTeam || null,
+      assigned_employee: record.assignedEmployee || null,
+    };
+  }
+
+  async function saveSelectedRecord() {
+    if (!selectedId || !selectedRecord.action?.trim()) {
+      setSaveMessage(t.selectAction);
+      return false;
+    }
+
+    setIsSaving(true);
+    setSaveMessage("");
+
+    try {
+      const response = await fetch(
+        `${API_BASE_URL}/api/sedad/churn-prevention/${encodeURIComponent(selectedId)}`,
+        {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(getSavePayload(selectedRecord)),
+        }
+      );
+
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        throw new Error(data.detail || t.saveFailed);
       }
-      setSaveMessage(t.contactLoggedInBrowser);
-      return next;
-    });
+
+      setSaveMessage(t.savedToDatabase);
+      return true;
+    } catch (err) {
+      setSaveMessage(err.message || t.saveFailed);
+      return false;
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
+  async function logCustomerContact() {
+    if (!selectedId) return;
+
+    const record = records[selectedId] || {};
+    if (!record.action?.trim()) {
+      setSaveMessage(t.selectAction);
+      return;
+    }
+
+    setIsLoggingContact(true);
+    setSaveMessage("");
+
+    try {
+      const nextStatus = record.status || "Offen";
+
+      const saveResponse = await fetch(
+        `${API_BASE_URL}/api/sedad/churn-prevention/${encodeURIComponent(selectedId)}`,
+        {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(getSavePayload({ ...record, status: nextStatus })),
+        }
+      );
+
+      if (!saveResponse.ok) {
+        const data = await saveResponse.json().catch(() => ({}));
+        throw new Error(data.detail || t.saveFailed);
+      }
+
+      const contactResponse = await fetch(
+        `${API_BASE_URL}/api/sedad/churn-prevention/${encodeURIComponent(selectedId)}/contact`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ notes: record.notes || null }),
+        }
+      );
+
+      if (!contactResponse.ok) {
+        const data = await contactResponse.json().catch(() => ({}));
+        throw new Error(data.detail || t.contactFailed);
+      }
+
+      setRecords((current) => ({
+        ...current,
+        [selectedId]: { ...record, status: nextStatus },
+      }));
+      setSaveMessage(t.contactLoggedToDatabase);
+
+      const performanceResponse = await fetch(
+        `${API_BASE_URL}/api/sedad/retention-performance?period=${retentionPeriod}`
+      );
+      if (performanceResponse.ok) {
+        setActivityReport(await performanceResponse.json());
+      }
+    } catch (err) {
+      setSaveMessage(err.message || t.contactFailed);
+    } finally {
+      setIsLoggingContact(false);
+    }
   }
 
   const counts = {
@@ -348,7 +313,7 @@ function ChurnPrevention({ churnData, loading, error, language = "en" }) {
   if (error) return <div className="cp-message cp-error">{error}</div>;
   if (actionsError) return <div className="cp-message cp-error">{actionsError}</div>;
 
-  const report = buildActivityReport(records, retentionPeriod);
+  const report = activityReport;
   const visibleCustomers = filteredCustomers.slice(0, 200);
 
   return (
@@ -592,19 +557,17 @@ function ChurnPrevention({ churnData, loading, error, language = "en" }) {
           </div>
 
           <div className="cp-form-grid">
-            <label>
-              {t.retentionPriority}
-              <select value={selectedRecord.retentionPriority || selectedCustomer.retention_priority || "low"}
-                onChange={(e) => updateSelectedRecord("retentionPriority", e.target.value)}>
-                {priorityOptions.map((value) => <option key={value} value={value}>{t[value]}</option>)}
-              </select>
-            </label>
+            <div className="cp-readonly-field">
+              <span>{t.retentionPriority}</span>
+              <strong>
+                {t[selectedCustomer.retention_priority] || selectedCustomer.retention_priority || "—"}
+              </strong>
+            </div>
 
-            <label>
-              {t.recommendation}
-              <textarea rows="2" value={selectedRecord.recommendation ?? selectedCustomer.recommendation ?? ""}
-                onChange={(e) => updateSelectedRecord("recommendation", e.target.value)} />
-            </label>
+            <div className="cp-readonly-field">
+              <span>{t.recommendation}</span>
+              <p>{selectedCustomer.recommendation || selectedCustomer.risk_reason || "—"}</p>
+            </div>
 
             <label>
               {t.action}
@@ -682,8 +645,11 @@ function ChurnPrevention({ churnData, loading, error, language = "en" }) {
           </div>
 
           <div className="cp-editor-actions">
-            <button type="button" className="cp-contact-button" onClick={logCustomerContact}>
-              {t.logContact}
+            <button type="button" className="cp-save-button" onClick={saveSelectedRecord} disabled={isSaving || isLoggingContact}>
+              {isSaving ? t.saving : t.saveToDatabase}
+            </button>
+            <button type="button" className="cp-contact-button" onClick={logCustomerContact} disabled={isSaving || isLoggingContact}>
+              {isLoggingContact ? t.saving : t.logContact}
             </button>
             {saveMessage && <span className="cp-saved">{saveMessage}</span>}
           </div>
