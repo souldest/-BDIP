@@ -11,6 +11,24 @@ const statusLabels = {
 
 const riskLabel = { high: "High", medium: "Medium", low: "Low" };
 const priorityLabel = { critical: "Critical", high: "High", medium: "Medium", low: "Low" };
+const priorityOptions = ["critical", "high", "medium", "low"];
+const statusOptions = Object.keys(statusLabels);
+const actionOptions = [
+  "Persönlicher Anruf",
+  "Beratungsgespräch",
+  "Individuelles Angebot",
+  "Gebühren- oder Konditionenprüfung",
+  "Kundenstatus prüfen",
+  "Weitere Action",
+];
+const teamOptions = [
+  "Customer Relationship Management",
+  "Retail Banking & Advisory",
+  "Pricing & Product Management",
+  "Customer Operations",
+  "Retention Management",
+];
+const storageKey = "sedad-demo-churn-records-v1";
 
 function formatComparison(item, period) {
   if (!item) return "Comparison unavailable";
@@ -24,6 +42,8 @@ function formatComparison(item, period) {
 
 function ChurnPrevention({ churnData, loading, error }) {
   const [records, setRecords] = useState({});
+  const [selectedId, setSelectedId] = useState("");
+  const [saveMessage, setSaveMessage] = useState("");
   const [search, setSearch] = useState("");
   const [riskFilter, setRiskFilter] = useState("high");
   const [statusFilter, setStatusFilter] = useState("all");
@@ -54,7 +74,13 @@ function ChurnPrevention({ churnData, loading, error }) {
             assignedEmployee: action.assigned_employee || "",
           };
         }
-        if (!cancelled) setRecords(loadedRecords);
+        let savedRecords = {};
+        try {
+          savedRecords = JSON.parse(localStorage.getItem(storageKey) || "{}");
+        } catch {
+          savedRecords = {};
+        }
+        if (!cancelled) setRecords({ ...loadedRecords, ...savedRecords });
       } catch (err) {
         if (!cancelled) setReportError(err.message);
       } finally {
@@ -91,24 +117,70 @@ function ChurnPrevention({ churnData, loading, error }) {
   const filteredCustomers = useMemo(() => {
     return customers.filter((customer) => {
       const record = records[customer.customer_id] || {};
+      const priority = record.retentionPriority || customer.retention_priority;
       return (
         String(customer.customer_id).toLowerCase().includes(search.trim().toLowerCase()) &&
         (riskFilter === "all" || customer.risk === riskFilter) &&
         (statusFilter === "all" || (record.status || "Offen") === statusFilter) &&
         (engagementFilter === "all" || customer.engagement_segment === engagementFilter) &&
-        (priorityFilter === "all" || customer.retention_priority === priorityFilter)
+        (priorityFilter === "all" || priority === priorityFilter)
       );
     }).sort((a, b) => {
       const order = { critical: 0, high: 1, medium: 2, low: 3 };
-      return (order[a.retention_priority] ?? 4) - (order[b.retention_priority] ?? 4);
+      const priorityA = records[a.customer_id]?.retentionPriority || a.retention_priority;
+      const priorityB = records[b.customer_id]?.retentionPriority || b.retention_priority;
+      return (order[priorityA] ?? 4) - (order[priorityB] ?? 4);
     });
   }, [customers, records, search, riskFilter, statusFilter, engagementFilter, priorityFilter]);
+
+  const selectedCustomer = customers.find((customer) => customer.customer_id === selectedId);
+  const selectedRecord = selectedId ? (records[selectedId] || {}) : {};
+
+  function updateSelectedRecord(field, value) {
+    if (!selectedId) return;
+    setSaveMessage("");
+    setRecords((current) => {
+      const next = {
+        ...current,
+        [selectedId]: { ...(current[selectedId] || {}), [field]: value },
+      };
+      try {
+        localStorage.setItem(storageKey, JSON.stringify(next));
+      } catch {
+        setSaveMessage("Browser storage is unavailable. Changes may not persist.");
+      }
+      return next;
+    });
+    setSaveMessage("Saved in this browser");
+  }
+
+  function logCustomerContact() {
+    if (!selectedId) return;
+    setRecords((current) => {
+      const next = {
+        ...current,
+        [selectedId]: {
+          ...(current[selectedId] || {}),
+          status: "Kontakt aufgenommen",
+          lastContactLoggedAt: new Date().toISOString(),
+        },
+      };
+      try {
+        localStorage.setItem(storageKey, JSON.stringify(next));
+      } catch {
+        setSaveMessage("Browser storage is unavailable. Changes may not persist.");
+        return next;
+      }
+      setSaveMessage("Customer contact logged in this browser");
+      return next;
+    });
+  }
 
   const counts = {
     high: customers.filter((c) => c.risk === "high").length,
     medium: customers.filter((c) => c.risk === "medium").length,
     low: customers.filter((c) => c.risk === "low").length,
-    critical: customers.filter((c) => c.retention_priority === "critical").length,
+    critical: customers.filter((c) => (records[c.customer_id]?.retentionPriority || c.retention_priority) === "critical").length,
     engagementHigh: customers.filter((c) => c.engagement_segment === "high").length,
     engagementMedium: customers.filter((c) => c.engagement_segment === "medium").length,
     engagementLow: customers.filter((c) => c.engagement_segment === "low").length,
@@ -129,10 +201,11 @@ function ChurnPrevention({ churnData, loading, error }) {
   return (
     <div className="cp-page">
       <div className="cp-notice">
-        <strong>READ-ONLY DEMO</strong>
+        <strong>INTERACTIVE DEMO</strong>
         <span>
-          Synthetic demonstration data. Risk classifications are based on rule-based churn analysis.
-          Retention records are displayed as a static snapshot and cannot be changed here.
+          Synthetic demonstration data. You can edit retention actions, priorities and recommendations.
+          Your changes are saved only in this browser and are not shared with other users or devices.
+          Retention effectiveness reports remain exported snapshots.
         </span>
       </div>
 
@@ -238,15 +311,21 @@ function ChurnPrevention({ churnData, loading, error }) {
             <tbody>
               {visibleCustomers.map((customer) => {
                 const record = records[customer.customer_id] || {};
+                const priority = record.retentionPriority || customer.retention_priority;
                 return (
-                  <tr key={customer.customer_id}>
+                  <tr
+                    key={customer.customer_id}
+                    className={selectedId === customer.customer_id ? "cp-selected-row" : "cp-clickable-row"}
+                    onClick={() => { setSelectedId(customer.customer_id); setSaveMessage(""); }}
+                    title="Click to edit this customer"
+                  >
                     <td className="cp-id">{customer.customer_id}</td>
                     <td><span className={`cp-risk cp-risk-${customer.risk}`}>{riskLabel[customer.risk] || customer.risk}</span></td>
                     <td><strong>{customer.engagement_score ?? 0}</strong><span className="cp-score-max"> / 100</span></td>
                     <td><span className={`cp-segment cp-segment-${customer.engagement_segment || "low"}`}>{customer.engagement_segment || "Unknown"}</span></td>
-                    <td><span className={`cp-priority cp-priority-${customer.retention_priority || "low"}`}>{priorityLabel[customer.retention_priority] || "Unknown"}</span></td>
+                    <td><span className={`cp-priority cp-priority-${priority || "low"}`}>{priorityLabel[priority] || "Unknown"}</span></td>
                     <td>{customer.days_inactive == null ? "No Successful Transaction" : `${customer.days_inactive} days`}</td>
-                    <td className="cp-recommendation">{customer.recommendation || customer.risk_reason || "–"}</td>
+                    <td className="cp-recommendation">{record.recommendation || customer.recommendation || customer.risk_reason || "–"}</td>
                     <td><span className="cp-status">{statusLabels[record.status || "Offen"] || record.status || "Open"}</span></td>
                   </tr>
                 );
@@ -261,6 +340,93 @@ function ChurnPrevention({ churnData, loading, error }) {
           </p>
         )}
       </section>
+
+      {selectedCustomer && (
+        <section className="cp-panel cp-editor">
+          <div className="cp-heading">
+            <div>
+              <h2>Edit Retention Action</h2>
+              <p>{selectedCustomer.first_name || ""} {selectedCustomer.last_name || ""} · {selectedCustomer.customer_id}</p>
+            </div>
+            <button type="button" className="cp-close-editor" onClick={() => setSelectedId("")}>Close</button>
+          </div>
+
+          <div className="cp-customer-info">
+            <span>Risk: <strong>{riskLabel[selectedCustomer.risk] || selectedCustomer.risk}</strong></span>
+            <span>Inactive: <strong>{selectedCustomer.days_inactive ?? "—"} days</strong></span>
+            <span>Engagement: <strong>{selectedCustomer.engagement_segment || "—"}</strong></span>
+          </div>
+
+          <div className="cp-form-grid">
+            <label>
+              Retention Priority
+              <select value={selectedRecord.retentionPriority || selectedCustomer.retention_priority || "low"}
+                onChange={(e) => updateSelectedRecord("retentionPriority", e.target.value)}>
+                {priorityOptions.map((value) => <option key={value} value={value}>{priorityLabel[value]}</option>)}
+              </select>
+            </label>
+
+            <label>
+              Recommendation
+              <textarea rows="2" value={selectedRecord.recommendation ?? selectedCustomer.recommendation ?? ""}
+                onChange={(e) => updateSelectedRecord("recommendation", e.target.value)} />
+            </label>
+
+            <label>
+              Action
+              <select value={selectedRecord.action || ""}
+                onChange={(e) => updateSelectedRecord("action", e.target.value)}>
+                <option value="">Select action</option>
+                {actionOptions.map((value) => <option key={value} value={value}>{value}</option>)}
+              </select>
+            </label>
+
+            <label>
+              Responsible Team
+              <select value={selectedRecord.assignedTeam || ""}
+                onChange={(e) => updateSelectedRecord("assignedTeam", e.target.value)}>
+                <option value="">Select team</option>
+                {teamOptions.map((value) => <option key={value} value={value}>{value}</option>)}
+              </select>
+            </label>
+
+            <label>
+              Assigned Employee
+              <input value={selectedRecord.assignedEmployee || ""}
+                onChange={(e) => updateSelectedRecord("assignedEmployee", e.target.value)}
+                placeholder="Employee name" />
+            </label>
+
+            <label>
+              Processing Status
+              <select value={selectedRecord.status || "Offen"}
+                onChange={(e) => updateSelectedRecord("status", e.target.value)}>
+                {statusOptions.map((value) => <option key={value} value={value}>{statusLabels[value]}</option>)}
+              </select>
+            </label>
+
+            <label>
+              Next Follow-up
+              <input type="date" value={selectedRecord.followUpDate || ""}
+                onChange={(e) => updateSelectedRecord("followUpDate", e.target.value)} />
+            </label>
+
+            <label className="cp-notes">
+              Action Notes
+              <textarea rows="3" value={selectedRecord.notes || ""}
+                onChange={(e) => updateSelectedRecord("notes", e.target.value)}
+                placeholder="Add notes about the retention action..." />
+            </label>
+          </div>
+
+          <div className="cp-editor-actions">
+            <button type="button" className="cp-contact-button" onClick={logCustomerContact}>
+              Log Customer Contact
+            </button>
+            {saveMessage && <span className="cp-saved">{saveMessage}</span>}
+          </div>
+        </section>
+      )}
     </div>
   );
 }

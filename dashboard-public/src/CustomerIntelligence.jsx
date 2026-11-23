@@ -98,6 +98,26 @@ export default function CustomerIntelligence({
 
   const loadCustomer360 = (customer) => {
     setSelectedCustomer(customer);
+    setCustomer360Error("");
+    setCustomer360Loading(false);
+
+    // Build the public demo profile from the available synthetic customer record.
+    // No backend request and no fabricated account or transaction records.
+    setCustomer360({
+      customer: {
+        ...customer,
+        customer_type: null,
+        branch_id: null,
+      },
+      analytics: {
+        transaction_count: Number(customer.transaction_count || 0),
+        completed_transactions: Number(customer.completed_transactions || 0),
+        transaction_volume_by_currency: customer.transaction_volume_by_currency || [],
+        accounts_by_currency: [],
+      },
+      accounts: [],
+      transactions: [],
+    });
   };
 
   if (loading) {
@@ -635,7 +655,7 @@ export default function CustomerIntelligence({
                       <div className="c360-kpi">
                         <span className="c360-kpi-label">Total Accounts</span>
                         <div className="c360-kpi-value">
-                          {customer360.accounts.length}
+                          {number(customer360.customer.active_accounts ?? customer360.accounts.length)}
                         </div>
                       </div>
                     </div>
@@ -675,7 +695,7 @@ export default function CustomerIntelligence({
                   <section className="c360-card">
                     <h3>Activity History</h3>
                     {customer360.transactions.length === 0 ? (
-                      <p>No activity available.</p>
+                      <p>Individual transaction records are not included in this public demo. The transaction totals and currency volumes above come from the synthetic customer record.</p>
                     ) : (
                       <div className="c360-timeline">
                         {[...customer360.transactions]
@@ -707,9 +727,9 @@ export default function CustomerIntelligence({
                   </section>
 
                   <section>
-                    <h3>Accounts ({customer360.accounts.length})</h3>
+                    <h3>Account Records</h3>
                     {customer360.accounts.length === 0 ? (
-                      <p>No accounts available.</p>
+                      <p>Individual account records are not included in this public demo. The active account count above is taken from the synthetic customer record.</p>
                     ) : (
                       <div style={{ overflowX: "auto" }}>
                         <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
@@ -738,9 +758,9 @@ export default function CustomerIntelligence({
                   </section>
 
                   <section>
-                    <h3>Recent Transactions ({customer360.transactions.length})</h3>
+                    <h3>Recent Transaction Records</h3>
                     {customer360.transactions.length === 0 ? (
-                      <p>No transactions available.</p>
+                      <p>Individual transaction records are not included in this public demo. Aggregate transaction counts and volumes are shown above.</p>
                     ) : (
                       <div style={{ overflowX: "auto" }}>
                         <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
