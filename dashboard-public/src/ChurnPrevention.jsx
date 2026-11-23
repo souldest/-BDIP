@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import "./ChurnPrevention.css";
+import { translations } from "./translations";
 
 const statusLabels = {
   "Offen": "Open",
@@ -41,14 +42,49 @@ function clearActivityHistory(records) {
   }));
 }
 
-function formatComparison(item, period) {
-  if (!item) return "Comparison unavailable";
+function formatComparison(item, period, t) {
+  if (!item) return t.comparisonUnavailable;
   const change = Number(item.change || 0);
-  const previous = { daily: "previous day", weekly: "previous week", monthly: "previous month" }[period];
-  if (!change) return `No change vs ${previous}`;
+  const previous = { daily: t.previousDay, weekly: t.previousWeek, monthly: t.previousMonth }[period];
+  if (!change) return `${t.noChange} vs ${previous}`;
   const sign = change > 0 ? "+" : "";
   const percentage = item.change_percent == null ? "" : ` (${item.change_percent > 0 ? "+" : ""}${item.change_percent}%)`;
   return `${sign}${change}${percentage} vs ${previous}`;
+}
+
+function translateRecommendation(value, language) {
+  if (!value) return value;
+
+  const labels = {
+    "Kunde war kürzlich aktiv": {
+      en: "Customer was recently active",
+      fr: "Le client a été actif récemment",
+    },
+    "Kundenbindung weiter stärken": {
+      en: "Continue strengthening customer engagement",
+      fr: "Continuer à renforcer la fidélisation du client",
+    },
+    "Contact the customer and present a tailored offer": {
+      en: "Contact the customer and present a tailored offer",
+      fr: "Contacter le client et lui présenter une offre personnalisée",
+    },
+    "Initiate a personalized retention intervention": {
+      en: "Initiate a personalized retention intervention",
+      fr: "Lancer une action de fidélisation personnalisée",
+    },
+  };
+
+  if (labels[value]) return labels[value][language] || labels[value].en;
+
+  const inactiveMatch = value.match(/^No successful transaction in the last (\d+) days$/);
+  if (inactiveMatch) {
+    const days = inactiveMatch[1];
+    return language === "fr"
+      ? `Aucune transaction réussie au cours des ${days} derniers jours`
+      : `No successful transaction in the last ${days} days`;
+  }
+
+  return value;
 }
 
 function buildActivityReport(records, period) {
@@ -147,7 +183,8 @@ function buildActivityReport(records, period) {
   };
 }
 
-function ChurnPrevention({ churnData, loading, error }) {
+function ChurnPrevention({ churnData, loading, error, language = "en" }) {
+  const t = translations[language] || translations.en;
   const [records, setRecords] = useState({});
   const [selectedId, setSelectedId] = useState("");
   const [saveMessage, setSaveMessage] = useState("");
@@ -258,11 +295,11 @@ function ChurnPrevention({ churnData, loading, error }) {
       try {
         localStorage.setItem(storageKey, JSON.stringify(next));
       } catch {
-        setSaveMessage("Browser storage is unavailable. Changes may not persist.");
+        setSaveMessage(t.storageUnavailable);
       }
       return next;
     });
-    setSaveMessage("Saved in this browser");
+    setSaveMessage(t.savedInBrowser);
   }
 
   function logCustomerContact() {
@@ -283,10 +320,10 @@ function ChurnPrevention({ churnData, loading, error }) {
       try {
         localStorage.setItem(storageKey, JSON.stringify(next));
       } catch {
-        setSaveMessage("Browser storage is unavailable. Changes may not persist.");
+        setSaveMessage(t.storageUnavailable);
         return next;
       }
-      setSaveMessage("Customer contact logged in this browser");
+      setSaveMessage(t.contactLoggedInBrowser);
       return next;
     });
   }
@@ -305,7 +342,7 @@ function ChurnPrevention({ churnData, loading, error }) {
   };
 
   if (loading || actionsLoading) {
-    return <div className="cp-message">Loading demo data...</div>;
+    return <div className="cp-message">{t.loadingChurn}</div>;
   }
 
   if (error) return <div className="cp-message cp-error">{error}</div>;
@@ -317,64 +354,62 @@ function ChurnPrevention({ churnData, loading, error }) {
   return (
     <div className="cp-page">
       <div className="cp-notice">
-        <strong>INTERACTIVE DEMO</strong>
+        <strong>{t.interactiveDemo}</strong>
         <span>
-          Synthetic demonstration data. You can edit retention actions, priorities and recommendations.
-          Your changes are saved only in this browser and are not shared with other users or devices.
-          Daily, weekly and monthly activity is counted from new changes and contacts logged in this browser.
+          {t.churnDemoNotice}
         </span>
       </div>
 
       <div className="cp-summary">
-        <article className="cp-metric cp-high"><span>High-Risk Customers</span><strong>{counts.high}</strong></article>
-        <article className="cp-metric cp-open"><span>Open Actions</span><strong>{counts.open}</strong></article>
-        <article className="cp-metric cp-contact"><span>Contacted / Interested</span><strong>{counts.contacted}</strong></article>
-        <article className="cp-metric cp-success"><span>Retained</span><strong>{counts.recovered}</strong></article>
-        <article className="cp-metric cp-critical"><span>Critical Retention</span><strong>{counts.critical}</strong></article>
-        <article className="cp-metric cp-engagement-high"><span>High Engagement</span><strong>{counts.engagementHigh}</strong></article>
-        <article className="cp-metric cp-engagement-medium"><span>Medium Engagement</span><strong>{counts.engagementMedium}</strong></article>
-        <article className="cp-metric cp-engagement-low"><span>Low Engagement</span><strong>{counts.engagementLow}</strong></article>
+        <article className="cp-metric cp-high"><span>{t.highRiskCustomers}</span><strong>{counts.high}</strong></article>
+        <article className="cp-metric cp-open"><span>{t.openActions}</span><strong>{counts.open}</strong></article>
+        <article className="cp-metric cp-contact"><span>{t.contactedInterested}</span><strong>{counts.contacted}</strong></article>
+        <article className="cp-metric cp-success"><span>{t.retained}</span><strong>{counts.recovered}</strong></article>
+        <article className="cp-metric cp-critical"><span>{t.criticalRetention}</span><strong>{counts.critical}</strong></article>
+        <article className="cp-metric cp-engagement-high"><span>{t.highEngagement}</span><strong>{counts.engagementHigh}</strong></article>
+        <article className="cp-metric cp-engagement-medium"><span>{t.mediumEngagement}</span><strong>{counts.engagementMedium}</strong></article>
+        <article className="cp-metric cp-engagement-low"><span>{t.lowEngagement}</span><strong>{counts.engagementLow}</strong></article>
       </div>
 
       <section className="cp-panel cp-effectiveness">
         <div className="cp-heading">
           <div>
-            <h2>Retention Effectiveness</h2>
-            <p>Activity recorded in this browser</p>
+            <h2>{t.retentionEffectiveness}</h2>
+            <p>{t.activityRecorded}</p>
           </div>
           <label className="cp-period-select">
-            Reporting Period
+            {t.reportingPeriod}
             <select value={retentionPeriod} onChange={(event) => setRetentionPeriod(event.target.value)}>
-              <option value="daily">Daily</option>
-              <option value="weekly">Weekly</option>
-              <option value="monthly">Monthly</option>
+              <option value="daily">{t.daily}</option>
+              <option value="weekly">{t.weekly}</option>
+              <option value="monthly">{t.monthly}</option>
             </select>
           </label>
         </div>
 
-        <h3 className="cp-report-subtitle">{retentionPeriod.charAt(0).toUpperCase() + retentionPeriod.slice(1)} Activity</h3>
+        <h3 className="cp-report-subtitle">{t[retentionPeriod]} {t.activity}</h3>
 
         <div className="cp-effectiveness-grid">
           {[
-            ["Actions Updated", "actions_updated", "Retention actions edited during this period"],
-            ["Customer Contacts", "customer_contacts", "Explicitly logged customer contacts"],
-            ["Successful Status Changes", "successful_outcomes", "Status changes marked successfully retained"],
-            ["Unsuccessful Status Changes", "unsuccessful_outcomes", "Status changes marked not successfully retained"],
+            [t.actionsUpdated, "actions_updated", t.actionsUpdatedNote],
+            [t.customerContacts, "customer_contacts", t.customerContactsNote],
+            [t.successfulChanges, "successful_outcomes", t.successfulChangesNote],
+            [t.unsuccessfulChanges, "unsuccessful_outcomes", t.unsuccessfulChangesNote],
           ].map(([label, key, description]) => (
             <article className="cp-effectiveness-card" key={key}>
               <span>{label}</span>
               <strong>{report?.totals?.[key] ?? "—"}</strong>
               <small>{description}</small>
-              <small className="cp-comparison">{formatComparison(report?.comparison?.[key], retentionPeriod)}</small>
+              <small className="cp-comparison">{formatComparison(report?.comparison?.[key], retentionPeriod, t)}</small>
             </article>
           ))}
         </div>
 
-        <h3 className="cp-report-subtitle">Team Performance</h3>
+        <h3 className="cp-report-subtitle">{t.teamPerformance}</h3>
         {report?.team_performance?.length ? (
           <div className="cp-team-report">
             <div className="cp-team-report-row cp-team-report-header">
-              <span>Responsible Team</span><span>Events</span><span>Contacts</span><span>Successful</span>
+              <span>{t.responsibleTeam}</span><span>{t.events}</span><span>{t.contacts}</span><span>{t.successful}</span>
             </div>
             {report.team_performance.map((team) => (
               <div className="cp-team-report-row" key={team.team_name}>
@@ -386,117 +421,104 @@ function ChurnPrevention({ churnData, loading, error }) {
             ))}
           </div>
         ) : (
-          <p className="cp-effectiveness-note">No team activity recorded for this period.</p>
+          <p className="cp-effectiveness-note">{t.noTeamActivity}</p>
         )}
-        <p className="cp-effectiveness-note">Reports update from activity newly recorded in this browser. Historical activity was reset.</p>
+        <p className="cp-effectiveness-note">{t.activityReportNote}</p>
       </section>
 
       <section className="cp-panel">
         <div className="cp-heading">
           <div>
-            <h2>Prioritized Customers</h2>
-            <p>Sedad Bank · {filteredCustomers.length.toLocaleString()} matching customers</p>
+            <h2>{t.prioritizedCustomers}</h2>
+            <p>Sedad Bank · {filteredCustomers.length.toLocaleString()} {t.matchingCustomers}</p>
           </div>
         </div>
 
         <details className="cp-priority-guide">
-          <summary>How customer priorities are calculated</summary>
+          <summary>{t.howPrioritiesCalculated}</summary>
           <div className="cp-guide-content">
-            <p>
-              <strong>Retention Priority</strong> combines the customer's Churn Risk
-              with their Engagement Segment. It helps the team identify which
-              customers should receive attention first.
-            </p>
+            <p>{t.priorityExplanation}</p>
 
-            <h3>1. Engagement Score (0–100 points)</h3>
+            <h3>1. {t.engagementScore}</h3>
             <div className="cp-guide-grid">
               <div>
-                <strong>Recency · max. 40</strong>
+                <strong>{t.recency}</strong>
                 <ul>
-                  <li>Last successful transaction within 30 days: 40 points</li>
-                  <li>31–60 days: 30 points</li>
-                  <li>61–90 days: 15 points</li>
-                  <li>More than 90 days or no transaction: 0 points</li>
+                  <li>{t.recency40}</li>
+                  <li>{t.recency30}</li>
+                  <li>{t.recency15}</li>
+                  <li>{t.recency0}</li>
                 </ul>
               </div>
               <div>
-                <strong>Frequency · max. 40</strong>
+                <strong>{t.frequency}</strong>
                 <ul>
-                  <li>10 or more completed transactions in 90 days: 40 points</li>
-                  <li>5–9 transactions: 30 points</li>
-                  <li>1–4 transactions: 20 points</li>
-                  <li>No transactions: 0 points</li>
+                  <li>{t.frequency40}</li>
+                  <li>{t.frequency30}</li>
+                  <li>{t.frequency20}</li>
+                  <li>{t.frequency0}</li>
                 </ul>
               </div>
               <div>
-                <strong>Active Accounts · max. 20</strong>
+                <strong>{t.activeAccountsScore}</strong>
                 <ul>
-                  <li>2 or more active accounts: 20 points</li>
-                  <li>1 active account: 15 points</li>
-                  <li>No active accounts: 0 points</li>
+                  <li>{t.accounts20}</li>
+                  <li>{t.accounts15}</li>
+                  <li>{t.accounts0}</li>
                 </ul>
               </div>
             </div>
 
-            <p className="cp-guide-note">
-              The three component scores are added together. Engagement Segment:
-              <strong> High</strong> = 70–100, <strong>Medium</strong> = 40–69,
-              <strong> Low</strong> = 0–39.
-            </p>
+            <p className="cp-guide-note">{t.scoreTotal}</p>
 
-            <h3>2. Retention Priority Matrix</h3>
+            <h3>2. {t.priorityMatrix}</h3>
             <p className="cp-guide-note">
-              The backend combines Churn Risk (rows) and Engagement Segment (columns):
+              {t.matrixExplanation}
             </p>
             <div className="cp-guide-table-wrap">
               <table className="cp-guide-table">
                 <thead>
                   <tr>
-                    <th>Churn Risk</th>
-                    <th>High Engagement</th>
-                    <th>Medium Engagement</th>
-                    <th>Low Engagement</th>
+                    <th>{t.riskLabel}</th>
+                    <th>{t.highEngagement}</th>
+                    <th>{t.mediumEngagement}</th>
+                    <th>{t.lowEngagement}</th>
                   </tr>
                 </thead>
                 <tbody>
-                  <tr><th>High Risk</th><td>Critical</td><td>High</td><td>Medium</td></tr>
-                  <tr><th>Medium Risk</th><td>High</td><td>Medium</td><td>Medium</td></tr>
-                  <tr><th>Low Risk</th><td>Low</td><td>Low</td><td>Low</td></tr>
+                  <tr><th>{t.highRisk}</th><td>{t.critical}</td><td>{t.high}</td><td>{t.medium}</td></tr>
+                  <tr><th>{t.mediumRisk}</th><td>{t.high}</td><td>{t.medium}</td><td>{t.medium}</td></tr>
+                  <tr><th>{t.lowRisk}</th><td>{t.low}</td><td>{t.low}</td><td>{t.low}</td></tr>
                 </tbody>
               </table>
             </div>
 
-            <h3>3. How to interpret the result</h3>
+            <h3>3. {t.howInterpret}</h3>
             <ul>
-              <li><strong>Critical:</strong> Highest retention attention. High churn risk combined with high engagement.</li>
-              <li><strong>High:</strong> Important retention case requiring focused follow-up.</li>
-              <li><strong>Medium:</strong> Monitor the customer and consider appropriate retention activity.</li>
-              <li><strong>Low:</strong> Lower immediate retention priority under the current rules.</li>
+              <li><strong>{t.critical}:</strong> {t.criticalMeaning}</li>
+              <li><strong>{t.high}:</strong> {t.highMeaning}</li>
+              <li><strong>{t.medium}:</strong> {t.mediumMeaning}</li>
+              <li><strong>{t.low}:</strong> {t.lowMeaning}</li>
             </ul>
 
-            <p className="cp-guide-note">
-              This is a rule-based scoring and prioritization method. The Engagement
-              Score is calculated from the listed activity indicators; Retention
-              Priority is assigned using the matrix above. It is not itself a
-              machine-learning prediction.
-            </p>
+            <p className="cp-guide-note">{t.ruleBasedNote}</p>
           </div>
         </details>
 
         <div className="cp-filters">
-          <input type="search" placeholder="Search customer ID …" value={search} onChange={(event) => setSearch(event.target.value)} />
+          <input type="search" placeholder={t.searchCustomer} value={search} onChange={(event) => setSearch(event.target.value)} />
           <select value={riskFilter} onChange={(event) => setRiskFilter(event.target.value)}>
-            <option value="all">All Risk Levels</option><option value="high">High Risk</option><option value="medium">Medium Risk</option><option value="low">Low Risk</option>
+            <option value="all">{t.allRisk}</option><option value="high">{t.highRisk}</option><option value="medium">{t.mediumRisk}</option><option value="low">{t.lowRisk}</option>
           </select>
           <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}>
-            <option value="all">All Action Statuses</option>
+            <option value="all">{t.allStatuses}</option>
             {Object.entries(statusLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
           </select>
           <select value={engagementFilter} onChange={(event) => setEngagementFilter(event.target.value)}>
-            <option value="all">All Engagement Segments</option><option value="high">High Engagement</option><option value="medium">Medium Engagement</option><option value="low">Low Engagement</option>
+            <option value="all">{t.allSegments}</option><option value="high">{t.highEngagement}</option><option value="medium">{t.mediumEngagement}</option><option value="low">{t.lowEngagement}</option>
           </select>
           <select value={priorityFilter} onChange={(event) => setPriorityFilter(event.target.value)}>
-            <option value="all">All Retention Priorities</option><option value="critical">Critical</option><option value="high">High</option><option value="medium">Medium</option><option value="low">Low</option>
+            <option value="all">{t.allPriorities}</option><option value="critical">{t.critical}</option><option value="high">{t.high}</option><option value="medium">{t.medium}</option><option value="low">{t.low}</option>
           </select>
         </div>
 
@@ -504,7 +526,7 @@ function ChurnPrevention({ churnData, loading, error }) {
           <table className="cp-table">
             <thead>
               <tr>
-                <th>Customer ID</th><th>Risk</th><th>Engagement</th><th>Segment</th><th>Retention Priority</th><th>Inactive For</th><th>Recommendation</th><th>Action Status</th><th>Action</th>
+                <th>{t.customerId}</th><th>{t.riskLabel}</th><th>{t.engagement}</th><th>{t.customerType}</th><th>{t.retentionPriority}</th><th>{t.inactiveFor}</th><th>{t.recommendation}</th><th>{t.processingStatus}</th><th>{t.action}</th>
               </tr>
             </thead>
             <tbody>
@@ -516,16 +538,16 @@ function ChurnPrevention({ churnData, loading, error }) {
                     key={customer.customer_id}
                     className={selectedId === customer.customer_id ? "cp-selected-row" : "cp-clickable-row"}
                     onClick={() => { setSelectedId(customer.customer_id); setSaveMessage(""); }}
-                    title="Click to edit this customer"
+                    title={t.viewCustomer}
                   >
                     <td className="cp-id">{customer.customer_id}</td>
-                    <td><span className={`cp-risk cp-risk-${customer.risk}`}>{riskLabel[customer.risk] || customer.risk}</span></td>
+                    <td><span className={`cp-risk cp-risk-${customer.risk}`}>{t[customer.risk] || customer.risk}</span></td>
                     <td><strong>{customer.engagement_score ?? 0}</strong><span className="cp-score-max"> / 100</span></td>
-                    <td><span className={`cp-segment cp-segment-${customer.engagement_segment || "low"}`}>{customer.engagement_segment || "Unknown"}</span></td>
-                    <td><span className={`cp-priority cp-priority-${priority || "low"}`}>{priorityLabel[priority] || "Unknown"}</span></td>
-                    <td>{customer.days_inactive == null ? "No Successful Transaction" : `${customer.days_inactive} days`}</td>
-                    <td className="cp-recommendation">{record.recommendation || customer.recommendation || customer.risk_reason || "–"}</td>
-                    <td><span className="cp-status">{statusLabels[record.status || "Offen"] || record.status || "Open"}</span></td>
+                    <td><span className={`cp-segment cp-segment-${customer.engagement_segment || "low"}`}>{t[customer.engagement_segment] || t.noData}</span></td>
+                    <td><span className={`cp-priority cp-priority-${priority || "low"}`}>{t[priority] || t.noData}</span></td>
+                    <td>{customer.days_inactive == null ? t.noSuccessfulTransaction : `${customer.days_inactive} ${t.days}`}</td>
+                    <td className="cp-recommendation">{translateRecommendation(record.recommendation || customer.recommendation || customer.risk_reason || "–", language)}</td>
+                    <td><span className="cp-status">{({ "Offen": t.riskOpen, "Kontakt aufgenommen": t.contactInitiated, "Kunde interessiert": t.customerEngaged, "Erfolgreich zurückgewonnen": t.successfullyRetained, "Nicht zurückgewonnen": t.retentionUnsuccessful })[record.status || "Offen"] || t.riskOpen}</span></td>
                     <td>
                       <button
                         type="button"
@@ -536,19 +558,19 @@ function ChurnPrevention({ churnData, loading, error }) {
                           setSaveMessage("");
                         }}
                       >
-                        Edit
+                        {t.edit}
                       </button>
                     </td>
                   </tr>
                 );
               })}
-              {visibleCustomers.length === 0 && <tr><td colSpan="9" className="cp-empty">No matching customers found.</td></tr>}
+              {visibleCustomers.length === 0 && <tr><td colSpan="9" className="cp-empty">{t.noMatches}</td></tr>}
             </tbody>
           </table>
         </div>
         {filteredCustomers.length > visibleCustomers.length && (
           <p className="cp-effectiveness-note">
-            Showing the first {visibleCustomers.length} of {filteredCustomers.length.toLocaleString()} matching customers. Use the filters to narrow the list.
+            {t.showingFirst} {visibleCustomers.length} {t.showingCustomers} {filteredCustomers.length.toLocaleString()} {t.matchingCustomers} {t.useFilters}
           </p>
         )}
       </section>
@@ -557,83 +579,111 @@ function ChurnPrevention({ churnData, loading, error }) {
         <section className="cp-panel cp-editor">
           <div className="cp-heading">
             <div>
-              <h2>Edit Retention Action</h2>
+              <h2>{t.editAction}</h2>
               <p>{selectedCustomer.first_name || ""} {selectedCustomer.last_name || ""} · {selectedCustomer.customer_id}</p>
             </div>
-            <button type="button" className="cp-close-editor" onClick={() => setSelectedId("")}>Close</button>
+            <button type="button" className="cp-close-editor" onClick={() => setSelectedId("")}>{t.close}</button>
           </div>
 
           <div className="cp-customer-info">
-            <span>Risk: <strong>{riskLabel[selectedCustomer.risk] || selectedCustomer.risk}</strong></span>
-            <span>Inactive: <strong>{selectedCustomer.days_inactive ?? "—"} days</strong></span>
-            <span>Engagement: <strong>{selectedCustomer.engagement_segment || "—"}</strong></span>
+            <span>{t.riskLabel}: <strong>{t[selectedCustomer.risk] || selectedCustomer.risk}</strong></span>
+            <span>{t.inactiveFor}: <strong>{selectedCustomer.days_inactive == null ? "—" : `${selectedCustomer.days_inactive} ${t.days}`}</strong></span>
+            <span>{t.engagement}: <strong>{t[selectedCustomer.engagement_segment] || "—"}</strong></span>
           </div>
 
           <div className="cp-form-grid">
             <label>
-              Retention Priority
+              {t.retentionPriority}
               <select value={selectedRecord.retentionPriority || selectedCustomer.retention_priority || "low"}
                 onChange={(e) => updateSelectedRecord("retentionPriority", e.target.value)}>
-                {priorityOptions.map((value) => <option key={value} value={value}>{priorityLabel[value]}</option>)}
+                {priorityOptions.map((value) => <option key={value} value={value}>{t[value]}</option>)}
               </select>
             </label>
 
             <label>
-              Recommendation
+              {t.recommendation}
               <textarea rows="2" value={selectedRecord.recommendation ?? selectedCustomer.recommendation ?? ""}
                 onChange={(e) => updateSelectedRecord("recommendation", e.target.value)} />
             </label>
 
             <label>
-              Action
+              {t.action}
               <select value={selectedRecord.action || ""}
                 onChange={(e) => updateSelectedRecord("action", e.target.value)}>
-                <option value="">Select action</option>
-                {actionOptions.map((value) => <option key={value} value={value}>{value}</option>)}
+                <option value="">{t.selectAction}</option>
+                {actionOptions.map((value) => {
+                  const labels = {
+                    "Persönlicher Anruf": t.personalCall,
+                    "Beratungsgespräch": t.consultation,
+                    "Individuelles Angebot": t.individualOffer,
+                    "Gebühren- oder Konditionenprüfung": t.feeReview,
+                    "Kundenstatus prüfen": t.checkCustomerStatus,
+                    "Weitere Action": t.otherAction,
+                  };
+                  return <option key={value} value={value}>{labels[value] || value}</option>;
+                })}
               </select>
             </label>
 
             <label>
-              Responsible Team
+              {t.responsibleTeam}
               <select value={selectedRecord.assignedTeam || ""}
                 onChange={(e) => updateSelectedRecord("assignedTeam", e.target.value)}>
-                <option value="">Select team</option>
-                {teamOptions.map((value) => <option key={value} value={value}>{value}</option>)}
+                <option value="">{t.selectTeam}</option>
+                {teamOptions.map((value) => {
+                  const labels = {
+                    "Customer Relationship Management": t.crmTeam,
+                    "Retail Banking & Advisory": t.retailTeam,
+                    "Pricing & Product Management": t.pricingTeam,
+                    "Customer Operations": t.operationsTeam,
+                    "Retention Management": t.retentionTeam,
+                  };
+                  return <option key={value} value={value}>{labels[value] || value}</option>;
+                })}
               </select>
             </label>
 
             <label>
-              Assigned Employee
+              {t.assignedEmployee}
               <input value={selectedRecord.assignedEmployee || ""}
                 onChange={(e) => updateSelectedRecord("assignedEmployee", e.target.value)}
-                placeholder="Employee name" />
+                placeholder={t.employeeName} />
             </label>
 
             <label>
-              Processing Status
+              {t.processingStatus}
               <select value={selectedRecord.status || "Offen"}
                 onChange={(e) => updateSelectedRecord("status", e.target.value)}>
-                {statusOptions.map((value) => <option key={value} value={value}>{statusLabels[value]}</option>)}
+                {statusOptions.map((value) => {
+                  const labels = {
+                    "Offen": t.riskOpen,
+                    "Kontakt aufgenommen": t.contactInitiated,
+                    "Kunde interessiert": t.customerEngaged,
+                    "Erfolgreich zurückgewonnen": t.successfullyRetained,
+                    "Nicht zurückgewonnen": t.retentionUnsuccessful,
+                  };
+                  return <option key={value} value={value}>{labels[value] || statusLabels[value]}</option>;
+                })}
               </select>
             </label>
 
             <label>
-              Next Follow-up
+              {t.nextFollowUp}
               <input type="date" value={selectedRecord.followUpDate || ""}
                 onChange={(e) => updateSelectedRecord("followUpDate", e.target.value)} />
             </label>
 
             <label className="cp-notes">
-              Action Notes
+              {t.actionNotes}
               <textarea rows="3" value={selectedRecord.notes || ""}
                 onChange={(e) => updateSelectedRecord("notes", e.target.value)}
-                placeholder="Add notes about the retention action..." />
+                placeholder={t.addNotes} />
             </label>
           </div>
 
           <div className="cp-editor-actions">
             <button type="button" className="cp-contact-button" onClick={logCustomerContact}>
-              Log Customer Contact
+              {t.logContact}
             </button>
             {saveMessage && <span className="cp-saved">{saveMessage}</span>}
           </div>

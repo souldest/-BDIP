@@ -3,9 +3,14 @@ import { Users, Activity, ShieldCheck, Search, Bell } from "lucide-react";
 import "./App.css";
 import CustomerIntelligence from "./CustomerIntelligence";
 import ChurnPrevention from "./ChurnPrevention";
+import { translations } from "./translations";
+
+const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || "http://localhost:8005").replace(/\/$/, "");
 
 function App() {
   const [selectedView, setSelectedView] = useState("customer-intelligence");
+  const [language, setLanguage] = useState("en");
+  const t = translations[language];
   const [customerData, setCustomerData] = useState(null);
   const [activityData, setActivityData] = useState(null);
   const [segmentationData, setSegmentationData] = useState(null);
@@ -16,21 +21,26 @@ function App() {
   useEffect(() => {
     let cancelled = false;
 
-    async function loadDemoData() {
+    async function loadDashboardData() {
       try {
-        const files = [
-          "customer-intelligence.json",
-          "customer-activity.json",
-          "customer-segmentation.json",
-          "churn-analysis.json",
+        const endpoints = [
+          "/api/sedad/customer-intelligence",
+          "/api/sedad/customer-activity",
+          "/api/sedad/customer-segmentation",
+          "/api/sedad/churn-analysis",
         ];
 
         const responses = await Promise.all(
-          files.map((file) => fetch(`/data/${file}`))
+          endpoints.map((endpoint) =>
+            fetch(`${API_BASE_URL}${endpoint}`)
+          )
         );
 
-        if (responses.some((response) => !response.ok)) {
-          throw new Error("Demo data could not be loaded.");
+        const failedResponse = responses.find((response) => !response.ok);
+        if (failedResponse) {
+          throw new Error(
+            `Backend request failed: ${failedResponse.status} ${failedResponse.url}`
+          );
         }
 
         const [customers, activity, segmentation, churn] = await Promise.all(
@@ -42,15 +52,19 @@ function App() {
           setActivityData(activity);
           setSegmentationData(segmentation);
           setChurnData(churn);
+          setError("");
         }
       } catch (err) {
-        if (!cancelled) setError(err.message);
+        if (!cancelled) {
+          setError(err.message || "Backend data could not be loaded.");
+        }
       } finally {
         if (!cancelled) setLoading(false);
       }
     }
 
-    loadDemoData();
+    loadDashboardData();
+
     return () => {
       cancelled = true;
     };
@@ -69,7 +83,7 @@ function App() {
           </div>
         </div>
 
-        <div className="workspace-label">WORKSPACE</div>
+        <div className="workspace-label">{t.workspaceLabel}</div>
         <div className="workspace">
           <div className="workspace-icon">S</div>
           <div style={{ flex: 1, minWidth: 0 }}>
@@ -82,20 +96,20 @@ function App() {
 
         <nav>
           <div className="nav-group">
-            <div className="nav-title">CUSTOMER & RETENTION</div>
+            <div className="nav-title">{t.customerRetention}</div>
             <button
               className={`nav-item ${!isChurn ? "active" : ""}`}
               onClick={() => setSelectedView("customer-intelligence")}
             >
               <Users size={18} />
-              <span>Customer Intelligence</span>
+              <span>{t.customerIntelligence}</span>
             </button>
             <button
               className={`nav-item ${isChurn ? "active" : ""}`}
               onClick={() => setSelectedView("churn-prevention")}
             >
               <Activity size={18} />
-              <span>Churn Prevention</span>
+              <span>{t.churnPrevention}</span>
             </button>
           </div>
         </nav>
@@ -105,7 +119,7 @@ function App() {
             <div className="avatar">SD</div>
             <div>
               <strong>Sedad Demo</strong>
-              <span>Read-only access</span>
+              <span>{t.readOnlyAccess}</span>
             </div>
           </div>
         </div>
@@ -114,13 +128,17 @@ function App() {
       <main className="main-content">
         <header className="topbar">
           <div className="breadcrumb">
-            Workspace <span>/</span>
+            {t.workspace} <span>/</span>
             <strong>Sedad Bank</strong>
           </div>
           <div className="top-actions">
+            <div className="language-switch" aria-label="Language selector">
+              <button type="button" className={language === "en" ? "active" : ""} aria-pressed={language === "en"} onClick={() => setLanguage("en")}>EN</button>
+              <button type="button" className={language === "fr" ? "active" : ""} aria-pressed={language === "fr"} onClick={() => setLanguage("fr")}>FR</button>
+            </div>
             <div className="search-box">
               <Search size={16} />
-              <span>Demo environment</span>
+              <span>{t.demoEnvironment}</span>
             </div>
             <div className="icon-button"><Bell size={19} /></div>
             <div className="top-avatar">SD</div>
@@ -134,18 +152,16 @@ function App() {
                 SEDAD BANK · SYNTHETIC DEMO DATA · READ ONLY
               </div>
               <h1>
-                {isChurn ? "Churn Prevention" : "Customer Intelligence"}
+                {isChurn ? t.churnPrevention : t.customerIntelligence}
                 <span> ✦</span>
               </h1>
               <p>
-                {isChurn
-                  ? "Customer retention insights and prevention performance."
-                  : "Customer status, account activity and transaction insights."}
+                {isChurn ? t.churnSubtitle : t.customerSubtitle}
               </p>
             </div>
             <div className="date-button">
               <ShieldCheck size={16} />
-              Read-only demo
+              {t.readOnlyDemo}
             </div>
           </section>
 
@@ -159,6 +175,7 @@ function App() {
             <ChurnPrevention
               churnData={churnData}
               bank="sedad"
+              language={language}
               loading={loading}
               error={error}
             />
@@ -171,6 +188,7 @@ function App() {
               loading={loading}
               error={error}
               bank="sedad"
+              language={language}
             />
           )}
         </div>

@@ -16,9 +16,10 @@ import {
   ArrowLeftRight,
 } from "lucide-react";
 import "./CustomerIntelligence.css";
+import { translations } from "./translations";
 
-const number = (value) =>
-  new Intl.NumberFormat("en-US").format(Number(value || 0));
+const number = (value, locale = "en-US") =>
+  new Intl.NumberFormat(locale).format(Number(value || 0));
 
 const statusColors = {
   active: "#29966d",
@@ -30,7 +31,7 @@ const statusColors = {
   failed: "#d86b70",
 };
 
-const label = (value) => {
+const label = (value, language = "en") => {
   const labels = {
     active: "Active",
     inactive: "Inactive",
@@ -46,11 +47,60 @@ const label = (value) => {
     transfer: "Transfer",
     withdrawal: "Withdrawal",
     bill_payment: "Bill Payment",
+    individual: "Individual Customer",
+    corporate: "Corporate Customer",
   };
-  return labels[value] || value || "Unknown";
+  const frenchLabels = {
+    active: "Actif",
+    inactive: "Inactif",
+    blocked: "Bloqué",
+    closed: "Clôturé",
+    completed: "Terminé",
+    pending: "En attente",
+    failed: "Échoué",
+    current: "Compte courant",
+    savings: "Compte d’épargne",
+    business: "Compte professionnel",
+    deposit: "Dépôt",
+    transfer: "Virement",
+    withdrawal: "Retrait",
+    bill_payment: "Paiement de facture",
+    individual: "Client particulier",
+    corporate: "Client entreprise",
+  };
+  return (language === "fr" ? frenchLabels[value] : labels[value]) || value || "—";
 };
 
-function KpiCard({ title, value, icon: Icon, tone }) {
+
+const translateBackendText = (value, language = "en") => {
+  if (!value) return "—";
+
+  const translationsMap = {
+    "kunde war kürzlich aktiv": {
+      en: "Customer was recently active",
+      fr: "Le client a été récemment actif",
+    },
+    "kundenbindung weiter stärken": {
+      en: "Strengthen customer retention",
+      fr: "Renforcer la fidélisation du client",
+    },
+  };
+
+  const key = String(value).trim().toLowerCase();
+  return translationsMap[key]?.[language] || value;
+};
+
+const riskLabel = (risk, language = "en") => {
+  const labels = {
+    low: { en: "Low", fr: "Faible" },
+    medium: { en: "Medium", fr: "Moyen" },
+    high: { en: "High", fr: "Élevé" },
+  };
+
+  return labels[String(risk || "").toLowerCase()]?.[language] || risk || "—";
+};
+
+function KpiCard({ title, value, icon: Icon, tone, footnote }) {
   return (
     <div className="ci-kpi-card">
       <div className="ci-kpi-top">
@@ -60,12 +110,12 @@ function KpiCard({ title, value, icon: Icon, tone }) {
         </span>
       </div>
       <div className="ci-kpi-value">{number(value)}</div>
-      <div className="ci-kpi-foot">Synthetic Demo Data</div>
+      <div className="ci-kpi-foot">{footnote}</div>
     </div>
   );
 }
 
-function Panel({ title, subtitle, children }) {
+function Panel({ title, subtitle, children, demoLabel }) {
   return (
     <section className="panel ci-panel">
       <div className="panel-heading">
@@ -73,7 +123,7 @@ function Panel({ title, subtitle, children }) {
           <h2>{title}</h2>
           <p>{subtitle}</p>
         </div>
-        <span className="ci-demo-tag">DEMO</span>
+        <span className="ci-demo-tag">{demoLabel}</span>
       </div>
       {children}
     </section>
@@ -88,7 +138,11 @@ export default function CustomerIntelligence({
   loading,
   error,
   bank,
+  language = "en",
 }) {
+  const t = translations[language] || translations.en;
+  const footnote = t.syntheticData;
+  const locale = language === "fr" ? "fr-FR" : "en-US";
   const [searchTerm, setSearchTerm] = useState("");
   const [riskFilter, setRiskFilter] = useState("all");
   const [selectedCustomer, setSelectedCustomer] = useState(null);
@@ -121,7 +175,7 @@ export default function CustomerIntelligence({
   };
 
   if (loading) {
-    return <div className="panel ci-message">Loading Customer Intelligence …</div>;
+    return <div className="panel ci-message">{t.loading}</div>;
   }
 
   if (error) {
@@ -131,7 +185,7 @@ export default function CustomerIntelligence({
   if (!customerData?.customers || !activityData?.accounts || !activityData?.transactions) {
     return (
       <div className="panel ci-message">
-        No Customer Intelligence data is currently available for this bank.
+        {t.noData}
       </div>
     );
   }
@@ -172,7 +226,7 @@ export default function CustomerIntelligence({
   accountRows.forEach((row) => {
     const type = row.account_type || "other";
     const status = row.account_status || "unknown";
-    if (!accountMap.has(type)) accountMap.set(type, { accountType: label(type) });
+    if (!accountMap.has(type)) accountMap.set(type, { accountType: label(type, language) });
     const entry = accountMap.get(type);
     entry[status] = (entry[status] || 0) + Number(row.total || 0);
   });
@@ -184,7 +238,7 @@ export default function CustomerIntelligence({
     const type = row.transaction_type || "other";
     const status = row.transaction_status || "unknown";
     if (!transactionMap.has(type)) {
-      transactionMap.set(type, { transactionType: label(type) });
+      transactionMap.set(type, { transactionType: label(type, language) });
     }
     const entry = transactionMap.get(type);
     entry[status] = (entry[status] || 0) + Number(row.total || 0);
@@ -229,7 +283,7 @@ export default function CustomerIntelligence({
       <div className="ci-notice">
         <span className="ci-notice-dot" />
         <div>
-          <strong>Synthetic Demo Data</strong>
+          <strong>{footnote}</strong>
           <span>
             This Customer Intelligence view uses test or demo records
             and is not a real-time customer analysis.
@@ -239,28 +293,32 @@ export default function CustomerIntelligence({
 
       <div className="kpi-grid ci-kpi-grid">
         <KpiCard
-          title="Total Customers"
+          title={t.totalCustomers}
           value={customers.total}
           icon={Users}
           tone="blue"
+          footnote={footnote}
         />
         <KpiCard
-          title="Active Customers"
+          title={t.activeCustomers}
           value={activeCustomers}
           icon={UserCheck}
           tone="green"
+          footnote={footnote}
         />
         <KpiCard
-          title="Total Accounts"
+          title={t.totalAccounts}
           value={activityData.accounts.total}
           icon={Wallet}
           tone="gold"
+          footnote={footnote}
         />
         <KpiCard
-          title="Transactions"
+          title={t.transactions}
           value={activityData.transactions.total}
           icon={ArrowLeftRight}
           tone="violet"
+          footnote={footnote}
         />
       </div>
 
@@ -268,10 +326,10 @@ export default function CustomerIntelligence({
         <section className="panel ci-panel">
           <div className="panel-heading">
             <div>
-              <h2>Churn Risk Analysis</h2>
-              <p>Rule-based assessment of customer inactivity</p>
+              <h2>{t.churnRiskAnalysis}</h2>
+              <p>{t.ruleBasedAssessment}</p>
             </div>
-            <span className="ci-demo-tag">DEMO SIMULATION</span>
+            <span className="ci-demo-tag">{t.demoSimulation}</span>
           </div>
 
           <div className="kpi-grid ci-kpi-grid">
@@ -293,7 +351,7 @@ export default function CustomerIntelligence({
                 <div className="ci-kpi-value">
                   {number(churnData.risk_counts?.[risk.key] || 0)}
                 </div>
-                <div className="ci-kpi-foot">Synthetic Demo Data</div>
+                <div className="ci-kpi-foot">{footnote}</div>
               </div>
             ))}
           </div>
@@ -301,28 +359,24 @@ export default function CustomerIntelligence({
           <p className="ci-footnote">
             {bank === "corn" ? (
               <>
-                BMI Corn: Inactivity is calculated relative to the last
-                transaction date in the demo dataset
+                {t.bmiCornMethod}
                 {churnData.reference_date
-                  ? ` (${new Date(churnData.reference_date).toLocaleDateString("en-US")}).`
+                  ? ` (${new Date(churnData.reference_date).toLocaleDateString(locale)}).`
                   : "."}
-                This is not a current real-time assessment.
+                {" "}{t.notRealtime}
               </>
             ) : (
               <>
-                Sedad: Inactivity is measured from the latest transaction timestamp in the dataset, using the last successful transaction.
+                {t.sedadMethod}
               </>
             )}
-            {" "}Simulation method: rule-based classification. Low: 0–44 days,
-            medium: 45–89 days, high: 90 days or more without a qualifying transaction.
-            Blocked and inactive customers are also classified as high risk
-            This is not a prediction based on machine learning.
+            {" "}{t.simulationMethod}
           </p>
 
-          <h3 style={{ marginTop: 24 }}>Customer Overview</h3>
+          <h3 style={{ marginTop: 24 }}>{t.customerOverview}</h3>
           <p className="ci-footnote">
-            {number(filteredChurnCustomers.length)} matching customers out of{" "}
-            {number(churnData.total_customers)}. A maximum of 15 results are displayed.
+            {number(filteredChurnCustomers.length)} {t.matchingCustomers}{" "}
+            {number(churnData.total_customers)}. {t.max15}
           </p>
 
           <div style={{
@@ -335,8 +389,8 @@ export default function CustomerIntelligence({
               type="text"
               value={searchTerm}
               onChange={(event) => setSearchTerm(event.target.value)}
-              placeholder="Search customer ID ..."
-              aria-label="Search Customer ID"
+              placeholder={t.searchCustomer}
+              aria-label={t.searchCustomerAria}
               style={{
                 flex: "1 1 220px",
                 minWidth: 0,
@@ -351,7 +405,7 @@ export default function CustomerIntelligence({
             <select
               value={riskFilter}
               onChange={(event) => setRiskFilter(event.target.value)}
-              aria-label="Filter by risk"
+              aria-label={t.filterRisk}
               style={{
                 flex: "0 1 190px",
                 padding: "11px 12px",
@@ -361,10 +415,10 @@ export default function CustomerIntelligence({
                 color: "inherit"
               }}
             >
-              <option value="all">All Risk Levels</option>
-              <option value="low">Low Risk</option>
-              <option value="medium">Medium Risk</option>
-              <option value="high">High Risk</option>
+              <option value="all">{t.allRisk}</option>
+              <option value="low">{t.lowRisk}</option>
+              <option value="medium">{t.mediumRisk}</option>
+              <option value="high">{t.highRisk}</option>
             </select>
           </div>
 
@@ -377,7 +431,7 @@ export default function CustomerIntelligence({
             }}>
               <thead>
                 <tr>
-                  {["Customer ID", "Status", "Inactive For", "Risk", "Reason", "Recommendation"].map((heading) => (
+                  {[t.customerId, t.status, t.inactiveFor, t.risk, t.tableReason, t.recommendation].map((heading) => (
                     <th key={heading} style={{
                       padding: "12px 10px",
                       borderBottom: "1px solid var(--border-color, #e5e7eb)",
@@ -408,7 +462,7 @@ export default function CustomerIntelligence({
                       }}
                       tabIndex={0}
                       role="button"
-                      title="View customer details"
+                      title={t.viewCustomer}
                       style={{
                         cursor: "pointer",
                         background: selectedCustomer?.customer_id === customer.customer_id
@@ -420,19 +474,19 @@ export default function CustomerIntelligence({
                         {customer.customer_id}
                       </td>
                       <td style={{ padding: "11px 10px", borderBottom: "1px solid var(--border-color, #e5e7eb)" }}>
-                        {label(customer.customer_status)}
+                        {label(customer.customer_status, language)}
                       </td>
                       <td style={{ padding: "11px 10px", borderBottom: "1px solid var(--border-color, #e5e7eb)" }}>
-                        {customer.days_inactive == null ? "No Successful Transaction" : `${number(customer.days_inactive)} days`}
+                        {customer.days_inactive == null ? t.noSuccessfulTransaction : `${number(customer.days_inactive)} ${t.days}`}
                       </td>
                       <td style={{ padding: "11px 10px", borderBottom: "1px solid var(--border-color, #e5e7eb)", color: riskColor, fontWeight: 600 }}>
-                        {customer.risk === "high" ? "High" : customer.risk === "medium" ? "Medium" : "Low"}
+                        {customer.risk === "high" ? t.highRisk : customer.risk === "medium" ? t.mediumRisk : t.lowRisk}
                       </td>
                       <td style={{ padding: "11px 10px", borderBottom: "1px solid var(--border-color, #e5e7eb)", minWidth: 170 }}>
-                        {customer.risk_reason}
+                        {translateBackendText(customer.risk_reason, language)}
                       </td>
                       <td style={{ padding: "11px 10px", borderBottom: "1px solid var(--border-color, #e5e7eb)", minWidth: 190 }}>
-                        {customer.recommendation}
+                        {translateBackendText(customer.recommendation, language)}
                       </td>
                     </tr>
                   );
@@ -463,9 +517,9 @@ export default function CustomerIntelligence({
                 flexWrap: "wrap"
               }}>
                 <div>
-                  <h3 style={{ margin: 0 }}>Customer Details</h3>
+                  <h3 style={{ margin: 0 }}>{t.customerDetails}</h3>
                   <p className="ci-footnote">
-                    Customer ID: {selectedCustomer.customer_id}
+                    {t.customerId}: {selectedCustomer.customer_id}
                   </p>
                 </div>
                 <button
@@ -489,7 +543,7 @@ export default function CustomerIntelligence({
                     cursor: "pointer"
                   }}
                 >
-                  Close
+                  {t.close}
                 </button>
               </div>
 
@@ -505,8 +559,8 @@ export default function CustomerIntelligence({
                   background: "var(--hover-bg, rgba(100, 116, 139, 0.08))",
                   border: "1px solid var(--border-color, #e5e7eb)"
                 }}>
-                  <p className="ci-footnote">Customer Status</p>
-                  <strong>{label(selectedCustomer.customer_status)}</strong>
+                  <p className="ci-footnote">{t.customerStatus}</p>
+                  <strong>{label(selectedCustomer.customer_status, language)}</strong>
                 </div>
                 <div style={{
                   padding: 14,
@@ -514,7 +568,7 @@ export default function CustomerIntelligence({
                   background: "var(--hover-bg, rgba(100, 116, 139, 0.08))",
                   border: "1px solid var(--border-color, #e5e7eb)"
                 }}>
-                  <p className="ci-footnote">Active Accounts</p>
+                  <p className="ci-footnote">{t.activeAccounts}</p>
                   <strong>{number(selectedCustomer.active_accounts)}</strong>
                 </div>
                 <div style={{
@@ -523,11 +577,11 @@ export default function CustomerIntelligence({
                   background: "var(--hover-bg, rgba(100, 116, 139, 0.08))",
                   border: "1px solid var(--border-color, #e5e7eb)"
                 }}>
-                  <p className="ci-footnote">Inactive For</p>
+                  <p className="ci-footnote">{t.inactiveFor}</p>
                   <strong>
                     {selectedCustomer.days_inactive == null
-                      ? "No Successful Transaction"
-                      : `${number(selectedCustomer.days_inactive)} days`}
+                      ? t.noSuccessfulTransaction
+                      : `${number(selectedCustomer.days_inactive)} ${t.days}`}
                   </strong>
                 </div>
                 <div style={{
@@ -536,11 +590,11 @@ export default function CustomerIntelligence({
                   background: "var(--hover-bg, rgba(100, 116, 139, 0.08))",
                   border: "1px solid var(--border-color, #e5e7eb)"
                 }}>
-                  <p className="ci-footnote">Last Transaction</p>
+                  <p className="ci-footnote">{t.lastTransaction}</p>
                   <strong>
                     {selectedCustomer.last_transaction
-                      ? new Date(selectedCustomer.last_transaction).toLocaleString("en-US")
-                      : "No Successful Transaction"}
+                      ? new Date(selectedCustomer.last_transaction).toLocaleString(locale)
+                      : t.noSuccessfulTransaction}
                   </strong>
                 </div>
                 <div style={{
@@ -549,7 +603,7 @@ export default function CustomerIntelligence({
                   background: "var(--hover-bg, rgba(100, 116, 139, 0.08))",
                   border: "1px solid var(--border-color, #e5e7eb)"
                 }}>
-                  <p className="ci-footnote">Churn Risk</p>
+                  <p className="ci-footnote">{t.churnRisk}</p>
                   <strong style={{
                     color: selectedCustomer.risk === "high"
                       ? "#d86b70"
@@ -565,11 +619,7 @@ export default function CustomerIntelligence({
                     borderRadius: 20,
                     display: "inline-block"
                   }}>
-                    {selectedCustomer.risk === "high"
-                      ? "High"
-                      : selectedCustomer.risk === "medium"
-                        ? "Medium"
-                        : "Low"}
+                    {riskLabel(selectedCustomer.risk, language)}
                   </strong>
                 </div>
               </div>
@@ -580,8 +630,8 @@ export default function CustomerIntelligence({
                 borderRadius: 10,
                 background: "var(--hover-bg, rgba(100, 116, 139, 0.08))"
               }}>
-                <p className="ci-footnote">Grund der Einstufung</p>
-                <p>{selectedCustomer.risk_reason || "Not specified"}</p>
+                <p className="ci-footnote">{t.classificationReason}</p>
+                <p>{translateBackendText(selectedCustomer.risk_reason || "Not specified", language)}</p>
               </div>
 
               <div style={{
@@ -590,13 +640,13 @@ export default function CustomerIntelligence({
                 borderRadius: 10,
                 background: "var(--hover-bg, rgba(100, 116, 139, 0.08))"
               }}>
-                <p className="ci-footnote">Recommended Action</p>
-                <p>{selectedCustomer.recommendation || "No recommendation available"}</p>
+                <p className="ci-footnote">{t.recommendedAction}</p>
+                <p>{translateBackendText(selectedCustomer.recommendation || t.noRecommendation, language)}</p>
               </div>
 
               {customer360Loading && (
                 <p className="ci-footnote" style={{ marginTop: 18 }}>
-                  Loading Customer 360 data …
+                  {t.loadingCustomer360}
                 </p>
               )}
 
@@ -609,83 +659,83 @@ export default function CustomerIntelligence({
               {customer360 && (
                 <div style={{ marginTop: 22, display: "grid", gap: 18 }}>
                   <section>
-                    <h3>Customer Profile</h3>
+                    <h3>{t.customerProfile}</h3>
                     <div className="ci-detail-grid">
                       <div>
-                        <p className="ci-footnote">Name</p>
+                        <p className="ci-footnote">{t.name}</p>
                         <strong>
                           {[customer360.customer.first_name, customer360.customer.last_name]
-                            .filter(Boolean).join(" ") || "Not specified"}
+                            .filter(Boolean).join(" ") || t.notSpecified}
                         </strong>
                       </div>
                       <div>
-                        <p className="ci-footnote">Customer Type</p>
-                        <strong>{label(customer360.customer.customer_type)}</strong>
+                        <p className="ci-footnote">{t.customerType}</p>
+                        <strong>{label(customer360.customer.customer_type, language)}</strong>
                       </div>
                       <div>
-                        <p className="ci-footnote">Created On</p>
+                        <p className="ci-footnote">{t.createdOn}</p>
                         <strong>
                           {customer360.customer.created_at
-                            ? new Date(customer360.customer.created_at).toLocaleDateString("en-US")
-                            : "Not specified"}
+                            ? new Date(customer360.customer.created_at).toLocaleDateString(locale)
+                            : t.notSpecified}
                         </strong>
                       </div>
                       <div>
-                        <p className="ci-footnote">Branch ID</p>
-                        <strong>{customer360.customer.branch_id ?? "Not specified"}</strong>
+                        <p className="ci-footnote">{t.branchId}</p>
+                        <strong>{customer360.customer.branch_id ?? t.notSpecified}</strong>
                       </div>
                     </div>
                   </section>
 
                   <section className="c360-card">
-                    <h3>Customer Activity</h3>
+                    <h3>{t.customerActivity}</h3>
                     <div className="c360-kpis">
                       <div className="c360-kpi">
-                        <span className="c360-kpi-label">Transactions</span>
+                        <span className="c360-kpi-label">{t.transactions}</span>
                         <div className="c360-kpi-value">
                           {customer360.analytics?.transaction_count ?? customer360.transactions.length}
                         </div>
                       </div>
                       <div className="c360-kpi">
-                        <span className="c360-kpi-label">Completed</span>
+                        <span className="c360-kpi-label">{t.completed}</span>
                         <div className="c360-kpi-value">
                           {customer360.analytics?.completed_transactions ?? 0}
                         </div>
                       </div>
                       <div className="c360-kpi">
-                        <span className="c360-kpi-label">Total Accounts</span>
+                        <span className="c360-kpi-label">{t.totalAccounts}</span>
                         <div className="c360-kpi-value">
                           {number(customer360.customer.active_accounts ?? customer360.accounts.length)}
                         </div>
                       </div>
                     </div>
 
-                    <h4 style={{ marginTop: 20 }}>Transaction Volume by Currency</h4>
+                    <h4 style={{ marginTop: 20 }}>{t.transactionVolume}</h4>
                     <div className="c360-currency-grid">
                       {(customer360.analytics?.transaction_volume_by_currency ?? []).map((item) => (
                         <div className="c360-currency-item" key={item.currency}>
                           <span className="c360-kpi-label">{item.currency}</span>
                           <strong>{number(item.transaction_volume)} {item.currency}</strong>
                           <span className="c360-kpi-label">
-                            {item.transaction_count} Transactions
+                            {item.transaction_count} {t.transactionCountLabel}
                           </span>
                         </div>
                       ))}
                     </div>
                     <p className="ci-footnote">
-                      Volume of the latest 20 transactions loaded at most; not the customer’s complete lifetime transaction volume.
+                      {t.volumeLatest20}
                     </p>
                   </section>
 
                   <section className="c360-card">
-                    <h3>Account Overview by Currency</h3>
+                    <h3>{t.accountsByCurrency}</h3>
                     <div className="c360-currency-grid">
                       {(customer360.analytics?.accounts_by_currency ?? []).map((item) => (
                         <div className="c360-currency-item" key={item.currency}>
                           <span className="c360-kpi-label">{item.currency}</span>
-                          <strong>{item.account_count} Accounts</strong>
+                          <strong>{item.account_count} {t.accounts}</strong>
                           <span className="c360-kpi-label">
-                            {item.active_count} Active
+                            {item.active_count} {t.active}
                           </span>
                         </div>
                       ))}
@@ -693,9 +743,9 @@ export default function CustomerIntelligence({
                   </section>
 
                   <section className="c360-card">
-                    <h3>Activity History</h3>
+                    <h3>{t.activityHistory}</h3>
                     {customer360.transactions.length === 0 ? (
-                      <p>Individual transaction records are not included in this public demo. The transaction totals and currency volumes above come from the synthetic customer record.</p>
+                      <p>{t.noTransactionRecords}</p>
                     ) : (
                       <div className="c360-timeline">
                         {[...customer360.transactions]
@@ -707,17 +757,17 @@ export default function CustomerIntelligence({
                             <div className="c360-timeline-item" key={transaction.transaction_id}>
                               <div className="c360-timeline-content">
                                 <div className="c360-timeline-top">
-                                  <strong>{label(transaction.transaction_type)}</strong>
+                                  <strong>{label(transaction.transaction_type, language)}</strong>
                                   <span className="c360-timeline-amount">
                                     {number(transaction.amount)} {transaction.currency}
                                   </span>
                                 </div>
                                 <p className="c360-timeline-meta">
                                   {transaction.transaction_timestamp
-                                    ? new Date(transaction.transaction_timestamp).toLocaleString("en-US")
-                                    : "Unknown date"}
-                                  {" · "}{label(transaction.transaction_status)}
-                                  {" · "}{label(transaction.channel)}
+                                    ? new Date(transaction.transaction_timestamp).toLocaleString(locale)
+                                    : t.unknownDate}
+                                  {" · "}{label(transaction.transaction_status, language)}
+                                  {" · "}{label(transaction.channel, language)}
                                 </p>
                               </div>
                             </div>
@@ -727,15 +777,15 @@ export default function CustomerIntelligence({
                   </section>
 
                   <section>
-                    <h3>Account Records</h3>
+                    <h3>{t.accountRecords}</h3>
                     {customer360.accounts.length === 0 ? (
-                      <p>Individual account records are not included in this public demo. The active account count above is taken from the synthetic customer record.</p>
+                      <p>{t.noAccountRecords}</p>
                     ) : (
                       <div style={{ overflowX: "auto" }}>
                         <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
                           <thead>
                             <tr>
-                              {["Account ID", "Account Type", "Currency", "Status"].map((heading) => (
+                              {[t.accountId, t.accountType, t.currency, t.status].map((heading) => (
                                 <th key={heading} style={{ textAlign: "left", padding: 10 }}>
                                   {heading}
                                 </th>
@@ -746,9 +796,9 @@ export default function CustomerIntelligence({
                             {customer360.accounts.map((account) => (
                               <tr key={account.account_id}>
                                 <td style={{ padding: 10 }}>{account.account_id}</td>
-                                <td style={{ padding: 10 }}>{label(account.account_type)}</td>
+                                <td style={{ padding: 10 }}>{label(account.account_type, language)}</td>
                                 <td style={{ padding: 10 }}>{account.currency}</td>
-                                <td style={{ padding: 10 }}>{label(account.account_status)}</td>
+                                <td style={{ padding: 10 }}>{label(account.account_status, language)}</td>
                               </tr>
                             ))}
                           </tbody>
@@ -758,15 +808,15 @@ export default function CustomerIntelligence({
                   </section>
 
                   <section>
-                    <h3>Recent Transaction Records</h3>
+                    <h3>{t.recentTransactions}</h3>
                     {customer360.transactions.length === 0 ? (
-                      <p>Individual transaction records are not included in this public demo. Aggregate transaction counts and volumes are shown above.</p>
+                      <p>{t.noRecentTransactionRecords}</p>
                     ) : (
                       <div style={{ overflowX: "auto" }}>
                         <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
                           <thead>
                             <tr>
-                              {["Date", "Type", "Amount", "Status", "Channel"].map((heading) => (
+                              {[t.date, t.type, t.amount, t.status, t.channel].map((heading) => (
                                 <th key={heading} style={{ textAlign: "left", padding: 10 }}>
                                   {heading}
                                 </th>
@@ -778,15 +828,15 @@ export default function CustomerIntelligence({
                               <tr key={transaction.transaction_id}>
                                 <td style={{ padding: 10, whiteSpace: "nowrap" }}>
                                   {transaction.transaction_timestamp
-                                    ? new Date(transaction.transaction_timestamp).toLocaleString("en-US")
+                                    ? new Date(transaction.transaction_timestamp).toLocaleString(locale)
                                     : "–"}
                                 </td>
-                                <td style={{ padding: 10 }}>{label(transaction.transaction_type)}</td>
+                                <td style={{ padding: 10 }}>{label(transaction.transaction_type, language)}</td>
                                 <td style={{ padding: 10, whiteSpace: "nowrap" }}>
                                   {number(transaction.amount)} {transaction.currency}
                                 </td>
-                                <td style={{ padding: 10 }}>{label(transaction.transaction_status)}</td>
-                                <td style={{ padding: 10 }}>{label(transaction.channel)}</td>
+                                <td style={{ padding: 10 }}>{label(transaction.transaction_status, language)}</td>
+                                <td style={{ padding: 10 }}>{label(transaction.channel, language)}</td>
                               </tr>
                             ))}
                           </tbody>
@@ -809,9 +859,9 @@ export default function CustomerIntelligence({
         <>
           <div className="charts-grid ci-charts-grid">
             {customerTypeChartData.length > 0 && (
-              <Panel
-                title="Customers by Type"
-                subtitle="Individual and Corporate Customers"
+              <Panel demoLabel={t.demo}
+                title={t.customersByType}
+                subtitle={t.individualCorporate}
               >
                 <div className="ci-chart">
                   <ResponsiveContainer width="100%" height="100%">
@@ -827,9 +877,9 @@ export default function CustomerIntelligence({
               </Panel>
             )}
 
-            <Panel
-              title="Customers by Age Group"
-              subtitle="Customer Age Distribution"
+            <Panel demoLabel={t.demo}
+              title={t.customersByAge}
+              subtitle={t.ageDistribution}
             >
               <div className="ci-chart">
                 <ResponsiveContainer width="100%" height="100%">
@@ -850,9 +900,9 @@ export default function CustomerIntelligence({
 
           {branchChartData.length > 0 && (
             <div className="charts-grid ci-charts-grid">
-              <Panel
-                title="Customers by Branch"
-                subtitle="Number of customers by branch and city"
+              <Panel demoLabel={t.demo}
+                title={t.customersByBranch}
+                subtitle={t.customersByBranchSubtitle}
               >
                 <div className="ci-chart">
                   <ResponsiveContainer width="100%" height="100%">
@@ -872,9 +922,9 @@ export default function CustomerIntelligence({
       )}
 
       <div className="charts-grid ci-charts-grid">
-        <Panel
-          title="Customer Growth"
-          subtitle="New Customers per Month"
+        <Panel demoLabel={t.demo}
+          title={t.customerGrowth}
+          subtitle={t.newCustomersMonth}
         >
           <div className="ci-chart">
             <ResponsiveContainer width="100%" height="100%">
@@ -894,9 +944,9 @@ export default function CustomerIntelligence({
           </div>
         </Panel>
 
-        <Panel
-          title="Customer Status"
-          subtitle="Distribution by Customer Status"
+        <Panel demoLabel={t.demo}
+          title={t.customerStatus}
+          subtitle={t.statusDistribution}
         >
           <div className="ci-status-list">
             {statusRows.map((row) => {
@@ -911,7 +961,7 @@ export default function CustomerIntelligence({
                       className="status-dot"
                       style={{ background: statusColors[row.customer_status] || "#8994a6" }}
                     />
-                    <span>{label(row.customer_status)}</span>
+                    <span>{label(row.customer_status, language)}</span>
                     <strong>{number(total)}</strong>
                   </div>
                   <div className="ci-progress">
@@ -935,9 +985,9 @@ export default function CustomerIntelligence({
       </div>
 
       <div className="charts-grid ci-charts-grid">
-        <Panel
-          title="Accounts by Type and Status"
-          subtitle="Number of accounts; currencies are not added together"
+        <Panel demoLabel={t.demo}
+          title={t.accountsTypeStatus}
+          subtitle={t.accountsCurrencyNote}
         >
           <div className="ci-chart">
             <ResponsiveContainer width="100%" height="100%">
@@ -951,7 +1001,7 @@ export default function CustomerIntelligence({
                   <Bar
                     key={status}
                     dataKey={status}
-                    name={label(status)}
+                    name={label(status, language)}
                     stackId="accounts"
                     fill={statusColors[status] || "#527bd0"}
                   />
@@ -964,9 +1014,9 @@ export default function CustomerIntelligence({
           </p>
         </Panel>
 
-        <Panel
-          title="Transactions by Type and Status"
-          subtitle="Number of Transactions"
+        <Panel demoLabel={t.demo}
+          title={t.transactionsTypeStatus}
+          subtitle={t.transactionCount}
         >
           <div className="ci-chart">
             <ResponsiveContainer width="100%" height="100%">
@@ -980,7 +1030,7 @@ export default function CustomerIntelligence({
                   <Bar
                     key={status}
                     dataKey={status}
-                    name={label(status)}
+                    name={label(status, language)}
                     stackId="transactions"
                     fill={statusColors[status] || "#527bd0"}
                   />
@@ -989,13 +1039,13 @@ export default function CustomerIntelligence({
             </ResponsiveContainer>
           </div>
           <p className="ci-footnote">
-            The chart displays transaction counts, not totals across banks or currencies.
+            {t.chartTransactionNote}
           </p>
         </Panel>
       </div>
 
       <div className="ci-data-footer">
-        Data Source: {bank} · API Customer Intelligence · Synthetic Demo Data
+        {t.dataSource}: {bank} · {t.apiCustomerIntelligence} · {footnote}
       </div>
     </div>
   );
