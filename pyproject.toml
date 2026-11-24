@@ -1,0 +1,5 @@
+[tool.vercel]
+entrypoint = "backend.sedad_public_api:app"
+
+[tool.vercel.scripts]
+build = "npm ci --prefix dashboard-public && npm run build --prefix dashboard-public"

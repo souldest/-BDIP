@@ -29,7 +29,6 @@ const teamOptions = [
   "Customer Operations",
   "Retention Management",
 ];
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "";
 
 function formatComparison(item, period, t) {
   if (!item) return t.comparisonUnavailable;
@@ -89,6 +88,7 @@ function ChurnPrevention({ churnData, loading, error, language = "en" }) {
   const [retentionPeriod, setRetentionPeriod] = useState("daily");
   const [actionsLoading, setActionsLoading] = useState(true);
   const [actionsError, setActionsError] = useState("");
+  const [reportError, setReportError] = useState("");
   const [isSaving, setIsSaving] = useState(false);
   const [isLoggingContact, setIsLoggingContact] = useState(false);
   const [activityReport, setActivityReport] = useState(null);
@@ -98,16 +98,15 @@ function ChurnPrevention({ churnData, loading, error, language = "en" }) {
 
     async function loadActions() {
       try {
-        const response = await fetch(`${API_BASE_URL}/api/sedad/churn-prevention`);
-
+        const response = await fetch("/data/churn-prevention.json");
         if (!response.ok) {
-          throw new Error("Churn Prevention data could not be loaded from the database.");
+          throw new Error("Churn Prevention demo data could not be loaded.");
         }
 
-        const apiData = await response.json();
+        const jsonData = await response.json();
         const loadedRecords = {};
 
-        for (const action of apiData.actions || []) {
+        for (const action of jsonData.actions || []) {
           loadedRecords[action.customer_id] = {
             action: action.action || "",
             status: action.status || "Offen",
@@ -120,7 +119,7 @@ function ChurnPrevention({ churnData, loading, error, language = "en" }) {
 
         if (!cancelled) setRecords(loadedRecords);
       } catch (err) {
-        if (!cancelled) setActionsError(err.message);
+        if (!cancelled) setActionsError(err.message || "Demo data could not be loaded.");
       } finally {
         if (!cancelled) setActionsLoading(false);
       }
@@ -135,14 +134,17 @@ function ChurnPrevention({ churnData, loading, error, language = "en" }) {
 
     async function loadPerformance() {
       try {
-        const response = await fetch(
-          `${API_BASE_URL}/api/sedad/retention-performance?period=${retentionPeriod}`
-        );
-        if (!response.ok) throw new Error("Retention performance could not be loaded.");
+        setReportError("");
+        const response = await fetch(`/data/retention-${retentionPeriod}.json`);
+
+        if (!response.ok) {
+          throw new Error("Retention performance demo data could not be loaded.");
+        }
+
         const data = await response.json();
         if (!cancelled) setActivityReport(data);
       } catch (err) {
-        if (!cancelled) setActionsError(err.message);
+        if (!cancelled) setReportError(err.message || "Report data could not be loaded.");
       }
     }
 
@@ -186,52 +188,31 @@ function ChurnPrevention({ churnData, loading, error, language = "en" }) {
     }));
   }
 
-  function getSavePayload(record) {
-    return {
-      action: record.action || "",
-      status: record.status || "Offen",
-      follow_up_date: record.followUpDate || null,
-      notes: record.notes || null,
-      assigned_team: record.assignedTeam || null,
-      assigned_employee: record.assignedEmployee || null,
-    };
-  }
-
-  async function saveSelectedRecord() {
+  function saveSelectedRecord() {
     if (!selectedId || !selectedRecord.action?.trim()) {
       setSaveMessage(t.selectAction);
-      return false;
+      return;
     }
 
     setIsSaving(true);
     setSaveMessage("");
 
-    try {
-      const response = await fetch(
-        `${API_BASE_URL}/api/sedad/churn-prevention/${encodeURIComponent(selectedId)}`,
-        {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(getSavePayload(selectedRecord)),
-        }
-      );
+    // Demo: Änderungen bleiben nur im React-Zustand und werden
+    // beim Neuladen der Seite automatisch zurückgesetzt.
+    setRecords((current) => ({
+      ...current,
+      [selectedId]: { ...selectedRecord },
+    }));
 
-      if (!response.ok) {
-        const data = await response.json().catch(() => ({}));
-        throw new Error(data.detail || t.saveFailed);
-      }
-
-      setSaveMessage(t.savedToDatabase);
-      return true;
-    } catch (err) {
-      setSaveMessage(err.message || t.saveFailed);
-      return false;
-    } finally {
-      setIsSaving(false);
-    }
+    setSaveMessage(
+      language === "fr"
+        ? "Modifications enregistrées dans cette démo (non permanentes)."
+        : "Changes saved in this demo (not permanent)."
+    );
+    setIsSaving(false);
   }
 
-  async function logCustomerContact() {
+  function logCustomerContact() {
     if (!selectedId) return;
 
     const record = records[selectedId] || {};
@@ -243,54 +224,38 @@ function ChurnPrevention({ churnData, loading, error, language = "en" }) {
     setIsLoggingContact(true);
     setSaveMessage("");
 
-    try {
-      const nextStatus = record.status || "Offen";
+    const nextStatus = record.status === "Offen" || !record.status
+      ? "Kontakt aufgenommen"
+      : record.status;
 
-      const saveResponse = await fetch(
-        `${API_BASE_URL}/api/sedad/churn-prevention/${encodeURIComponent(selectedId)}`,
-        {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(getSavePayload({ ...record, status: nextStatus })),
-        }
-      );
+    setRecords((current) => ({
+      ...current,
+      [selectedId]: {
+        ...record,
+        status: nextStatus,
+      },
+    }));
 
-      if (!saveResponse.ok) {
-        const data = await saveResponse.json().catch(() => ({}));
-        throw new Error(data.detail || t.saveFailed);
-      }
+    // Die Kontaktzahl wird nur in der aktuellen Demo-Sitzung erhöht.
+    setActivityReport((current) => {
+      if (!current) return current;
 
-      const contactResponse = await fetch(
-        `${API_BASE_URL}/api/sedad/churn-prevention/${encodeURIComponent(selectedId)}/contact`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ notes: record.notes || null }),
-        }
-      );
-
-      if (!contactResponse.ok) {
-        const data = await contactResponse.json().catch(() => ({}));
-        throw new Error(data.detail || t.contactFailed);
-      }
-
-      setRecords((current) => ({
+      return {
         ...current,
-        [selectedId]: { ...record, status: nextStatus },
-      }));
-      setSaveMessage(t.contactLoggedToDatabase);
+        totals: {
+          ...current.totals,
+          total_events: (Number(current.totals?.total_events) || 0) + 1,
+          customer_contacts: (Number(current.totals?.customer_contacts) || 0) + 1,
+        },
+      };
+    });
 
-      const performanceResponse = await fetch(
-        `${API_BASE_URL}/api/sedad/retention-performance?period=${retentionPeriod}`
-      );
-      if (performanceResponse.ok) {
-        setActivityReport(await performanceResponse.json());
-      }
-    } catch (err) {
-      setSaveMessage(err.message || t.contactFailed);
-    } finally {
-      setIsLoggingContact(false);
-    }
+    setSaveMessage(
+      language === "fr"
+        ? "Contact client simulé dans cette démo."
+        : "Customer contact simulated in this demo."
+    );
+    setIsLoggingContact(false);
   }
 
   const counts = {
@@ -353,10 +318,11 @@ function ChurnPrevention({ churnData, loading, error, language = "en" }) {
         </div>
 
         <h3 className="cp-report-subtitle">{t[retentionPeriod]} {t.activity}</h3>
+        {reportError && <p className="cp-effectiveness-note">{reportError}</p>}
 
         <div className="cp-effectiveness-grid">
           {[
-            [t.actionsUpdated, "actions_updated", t.actionsUpdatedNote],
+            [t.actionsUpdated, "actions_created", t.actionsUpdatedNote],
             [t.customerContacts, "customer_contacts", t.customerContactsNote],
             [t.successfulChanges, "successful_outcomes", t.successfulChangesNote],
             [t.unsuccessfulChanges, "unsuccessful_outcomes", t.unsuccessfulChangesNote],
@@ -646,10 +612,10 @@ function ChurnPrevention({ churnData, loading, error, language = "en" }) {
 
           <div className="cp-editor-actions">
             <button type="button" className="cp-save-button" onClick={saveSelectedRecord} disabled={isSaving || isLoggingContact}>
-              {isSaving ? t.saving : t.saveToDatabase}
+              {isSaving ? t.saving : (language === "fr" ? "Enregistrer la démo" : "Save demo changes")}
             </button>
             <button type="button" className="cp-contact-button" onClick={logCustomerContact} disabled={isSaving || isLoggingContact}>
-              {isLoggingContact ? t.saving : t.logContact}
+              {isLoggingContact ? t.saving : (language === "fr" ? "Simuler un contact client" : "Simulate customer contact")}
             </button>
             {saveMessage && <span className="cp-saved">{saveMessage}</span>}
           </div>

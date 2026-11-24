@@ -335,3 +335,13 @@ app.include_router(
     churn_router,
     prefix="/api",
 )
+
+# ---------------------------------------------------------
+# Serve the Vite frontend
+# ---------------------------------------------------------
+
+app.frontend(
+    "/",
+    directory="dashboard-public/dist",
+    fallback="index.html",
+)
