@@ -1,0 +1,259 @@
+.sed-analytics {
+  display: grid;
+  gap: 20px;
+  width: 100%;
+}
+
+.sed-analytics-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+}
+
+.sed-analytics-eyebrow {
+  color: #64748b;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 1.1px;
+  margin-bottom: 7px;
+}
+
+.sed-analytics-heading h2 {
+  margin: 0;
+  color: #263b60;
+  font-size: 23px;
+  font-weight: 700;
+}
+
+.sed-analytics-heading p {
+  margin: 7px 0 0;
+  color: #64748b;
+  font-size: 13px;
+}
+
+.sed-analytics-refresh {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 14px;
+  border: 1px solid #dce3ed;
+  border-radius: 9px;
+  background: #fff;
+  color: #263b60;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.sed-analytics-refresh:hover {
+  background: #f5f8fc;
+}
+
+.sed-analytics-refresh:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}
+
+.sed-analytics-error {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 13px 16px;
+  border: 1px solid #f1c7c7;
+  border-radius: 10px;
+  background: #fff7f7;
+  color: #a12b2b;
+  font-size: 13px;
+}
+
+.sed-analytics-kpis {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 15px;
+}
+
+.sed-analytics-kpi,
+.sed-analytics-panel {
+  min-width: 0;
+  background: #fff;
+  border: 1px solid #e8edf5;
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(35, 55, 85, 0.035);
+}
+
+.sed-analytics-kpi {
+  padding: 18px;
+}
+
+.sed-analytics-kpi-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.sed-analytics-icon {
+  width: 36px;
+  height: 36px;
+  display: grid;
+  place-items: center;
+  border-radius: 10px;
+}
+
+.sed-analytics-icon.blue {
+  color: #3976c5;
+  background: #edf4ff;
+}
+
+.sed-analytics-icon.violet {
+  color: #8067bd;
+  background: #f3efff;
+}
+
+.sed-analytics-icon.gold {
+  color: #b18a36;
+  background: #fff7e8;
+}
+
+.sed-analytics-icon.green {
+  color: #16845b;
+  background: #eaf8f1;
+}
+
+.sed-analytics-kpi-value {
+  margin-top: 12px;
+  color: #263b60;
+  font-size: 27px;
+  line-height: 1.2;
+  font-weight: 750;
+  font-variant-numeric: tabular-nums;
+}
+
+.sed-analytics-kpi-note {
+  margin-top: 8px;
+  color: #8491a5;
+  font-size: 11px;
+}
+
+.sed-analytics-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 17px;
+  align-items: start;
+}
+
+.sed-analytics-panel {
+  padding: 18px;
+}
+
+.sed-analytics-wide {
+  grid-column: span 2;
+}
+
+.sed-analytics-panel-heading {
+  margin-bottom: 14px;
+}
+
+.sed-analytics-panel-heading h3 {
+  margin: 0;
+  color: #263b60;
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.sed-analytics-panel-heading p {
+  margin: 5px 0 0;
+  color: #8491a5;
+  font-size: 11px;
+}
+
+.sed-analytics-chart {
+  width: 100%;
+  height: 275px;
+  min-width: 0;
+}
+
+.sed-analytics-placeholder {
+  height: 100%;
+  display: grid;
+  place-items: center;
+  color: #8491a5;
+  font-size: 13px;
+}
+
+.sed-analytics-table-wrap {
+  width: 100%;
+  overflow-x: auto;
+}
+
+.sed-analytics-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+  text-align: left;
+}
+
+.sed-analytics-table th {
+  padding: 11px 12px;
+  color: #8491a5;
+  background: #f8fafc;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  white-space: nowrap;
+}
+
+.sed-analytics-table td {
+  padding: 12px;
+  color: #475569;
+  border-bottom: 1px solid #edf0f5;
+  white-space: nowrap;
+}
+
+.sed-analytics-table td strong {
+  color: #263b60;
+}
+
+.sed-analytics-footer {
+  color: #8491a5;
+  font-size: 11px;
+  line-height: 1.6;
+}
+
+@media (max-width: 1050px) {
+  .sed-analytics-kpis {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 700px) {
+  .sed-analytics-heading {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .sed-analytics-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .sed-analytics-wide {
+    grid-column: span 1;
+  }
+
+  .sed-analytics-chart {
+    height: 250px;
+  }
+}
+
+@media (max-width: 420px) {
+  .sed-analytics-kpis {
+    grid-template-columns: 1fr;
+  }
+}

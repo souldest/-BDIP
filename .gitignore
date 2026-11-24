@@ -1,0 +1,42 @@
+# Environment and secrets
+.env
+.env.*
+!.env.example
+
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+
+# Node
+node_modules/
+**/node_modules/
+
+# Build output
+dist/
+**/dist/
+
+# Local databases and backups
+*.sqlite
+*.db
+*.dump
+*.tar.gz
+/backups/
+
+# Temporary and backup files
+*.bak
+*.backup
+*.backup_*
+*.before_*
+*.comparison.bak
+*.step*.bak
+
+# OS/editor
+.DS_Store
+.vscode/
+.idea/
+
+# Additional temporary snapshots
+*.before-*
