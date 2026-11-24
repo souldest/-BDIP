@@ -120,7 +120,7 @@ function ChurnPrevention({ churnData, bank, loading, error }) {
 
       try {
         const response = await fetch(
-          `http://localhost:8005/api/${bank}/churn-prevention`
+          `/sedad-api/churn-prevention`
         );
 
         if (!response.ok) {
@@ -146,7 +146,7 @@ function ChurnPrevention({ churnData, bank, loading, error }) {
         }
 
         const teamResponse = await fetch(
-          `http://localhost:8005/api/${bank}/retention-teams`
+          `/sedad-api/retention-teams`
         );
 
         if (!teamResponse.ok) {
@@ -185,7 +185,7 @@ function ChurnPrevention({ churnData, bank, loading, error }) {
       setReportError("");
       try {
         const response = await fetch(
-          `http://localhost:8005/api/${bank}/retention-performance?period=${retentionPeriod}`
+          `/sedad-api/retention-performance?period=${retentionPeriod}`
         );
         if (!response.ok) {
           throw new Error("Retention report could not be loaded.");
@@ -211,7 +211,7 @@ function ChurnPrevention({ churnData, bank, loading, error }) {
 
     try {
       const response = await fetch(
-        `http://localhost:8005/api/${bank}/churn-prevention/${encodeURIComponent(customerId)}`,
+        `/sedad-api/churn-prevention/${encodeURIComponent(customerId)}`,
         {
           method: "PUT",
           headers: {
@@ -249,7 +249,7 @@ function ChurnPrevention({ churnData, bank, loading, error }) {
 
     try {
       const response = await fetch(
-        `http://localhost:8005/api/${bank}/churn-prevention/${encodeURIComponent(selectedId)}/contact`,
+        `/sedad-api/churn-prevention/${encodeURIComponent(selectedId)}/contact`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -265,7 +265,7 @@ function ChurnPrevention({ churnData, bank, loading, error }) {
 
       setSaveMessage("Customer contact recorded.");
       const reportResponse = await fetch(
-        `http://localhost:8005/api/${bank}/retention-performance?period=${retentionPeriod}`
+        `/sedad-api/retention-performance?period=${retentionPeriod}`
       );
       if (reportResponse.ok) {
         setRetentionReport(await reportResponse.json());

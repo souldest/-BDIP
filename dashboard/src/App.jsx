@@ -286,7 +286,10 @@ function App() {
                       setSelectedBank("sedad");
                       setSelectedView("sedad-analytics");
                     }
-                    if (label === "Churn Prevention") setSelectedView("churn-prevention");
+                    if (label === "Churn Prevention") {
+                      setSelectedBank("sedad");
+                      setSelectedView("churn-prevention");
+                    }
                   }}
                 >
                   <Icon size={18} /><span>{label}</span>
